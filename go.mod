@@ -1,4 +1,4 @@
-module github.com/boni-fm/go-api-boilerplate
+module go-api-boilerplate
 
 go 1.24.6
 
