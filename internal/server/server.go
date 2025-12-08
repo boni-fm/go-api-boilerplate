@@ -4,6 +4,7 @@ import (
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/api/router"
 	"go-api-boilerplate/internal/middleware"
+	"go-api-boilerplate/internal/utility/fibererror"
 	"go-api-boilerplate/internal/utility/swagger"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,6 +28,7 @@ func NewFiberConfig(cfg config.Config) *FiberConfig {
 		AppName:               cfg.AppName,
 		DisableStartupMessage: false,
 		CaseSensitive:         false,
+		ErrorHandler:          fibererror.GlobalErrorHandler,
 	}
 }
 
@@ -50,12 +52,11 @@ func (s *Server) SetMiddlewareDeps(middlewareDeps *middleware.MiddlewareDepedenc
 }
 
 func (s *Server) Start() error {
-	s.MiddlewareDeps.InitAllMiddleware()
 	router.SetupRoutes(s.App)
 	swagger.SwaggerSetup(s.App)
 
 	s.App.Static("/", "./static/public")
-	//s.MiddlewareDeps.InitErrorMiddleware()
+	s.MiddlewareDeps.InitAllMiddleware()
 
 	return s.App.Listen(":" + s.Cfg.Port)
 }

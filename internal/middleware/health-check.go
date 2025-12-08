@@ -6,14 +6,11 @@ import (
 )
 
 func HealthCheckMiddleware() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		healthcheck.New(healthcheck.Config{
-			LivenessProbe: func(c *fiber.Ctx) bool {
-				return true
-			},
-			LivenessEndpoint: "/live",
+	return healthcheck.New(healthcheck.Config{
+		LivenessProbe: func(c *fiber.Ctx) bool {
+			return true
 		},
-		)
-		return c.Next()
-	}
+		LivenessEndpoint: "/live",
+	},
+	)
 }

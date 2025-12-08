@@ -7,20 +7,17 @@ import (
 )
 
 func LoggerMiddleware(log *logrus.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		fiberlogrus.New(
-			fiberlogrus.Config{
-				Logger: log,
-				Tags: []string{
-					fiberlogrus.TagMethod,
-					fiberlogrus.TagStatus,
-					fiberlogrus.TagPath,
-					fiberlogrus.TagRoute,
-					fiberlogrus.TagURL,
-					fiberlogrus.TagIP,
-				},
+	return fiberlogrus.New(
+		fiberlogrus.Config{
+			Logger: log,
+			Tags: []string{
+				fiberlogrus.TagMethod,
+				fiberlogrus.TagStatus,
+				fiberlogrus.TagPath,
+				fiberlogrus.TagRoute,
+				fiberlogrus.TagURL,
+				fiberlogrus.TagIP,
 			},
-		)
-		return c.Next()
-	}
+		},
+	)
 }

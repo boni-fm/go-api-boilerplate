@@ -12,7 +12,6 @@ import (
 func main() {
 	cfg := config.LoadConfigIni()
 	log_ := log.NewLoggerWithFilename(cfg.AppName)
-	log_.Logger.SetFormatter(&log.CustomLogFormatter{})
 
 	// init semuanya!
 	fiberCfg := server.NewFiberConfig(cfg)

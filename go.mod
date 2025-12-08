@@ -2,7 +2,10 @@ module go-api-boilerplate
 
 go 1.24.6
 
-require github.com/gofiber/fiber/v2 v2.52.10
+require (
+	github.com/gofiber/fiber/v2 v2.52.10
+	github.com/sirupsen/logrus v1.9.3
+)
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
@@ -17,7 +20,6 @@ require (
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mvrilo/go-redoc v0.1.5 // indirect
 	github.com/mvrilo/go-redoc/fiber v0.0.0-20250209151614-3a15e2c08553 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d // indirect
 	github.com/swaggo/files/v2 v2.0.2 // indirect
 	github.com/swaggo/swag v1.16.4 // indirect
