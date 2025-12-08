@@ -1,0 +1,25 @@
+definitions:
+  models.PingPongResponse:
+    properties:
+      message:
+        type: string
+      timestamp:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /ping:
+    get:
+      description: Ping Pong endpoint to check service availability
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Pong response
+          schema:
+            $ref: '#/definitions/models.PingPongResponse'
+      summary: Ping Check
+      tags:
+      - _
+swagger: "2.0"

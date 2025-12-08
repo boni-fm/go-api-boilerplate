@@ -1,0 +1,23 @@
+ARCHITECTURE
+Api Project
+- log service {libsd3}
+- db {libsd3}
+- middleware
+  -.OK http req/res logger 
+     :: https://github.com/bigunmd/fiberlogrus
+  -. reverse proxy
+  -.OK healthcheck
+  -.OK 404 handler
+  -.OK recover 
+     :: https://github.com/gofiber/fiber/tree/v2/middleware/recover
+  -. auth (jwt) // optional
+- docs
+  -. automatic swagger gen
+  -. swagger aggregation
+- api
+  -. health check
+  -. pingpong
+  -. docs (untuk aggregator)
+
+Desember 02, 2025
+[+] Initial commit and file structure!

@@ -1,0 +1,41 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/ping": {
+            "get": {
+                "description": "Ping Pong endpoint to check service availability",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "_"
+                ],
+                "summary": "Ping Check",
+                "responses": {
+                    "200": {
+                        "description": "Pong response",
+                        "schema": {
+                            "$ref": "#/definitions/models.PingPongResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "models.PingPongResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

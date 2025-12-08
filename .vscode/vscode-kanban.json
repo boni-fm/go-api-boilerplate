@@ -1,0 +1,34 @@
+{
+  "todo": [
+    {
+      "assignedTo": {
+        "name": "BonifasiusM"
+      },
+      "category": "feature",
+      "creation_time": "2025-12-05T08:43:55.079Z",
+      "details": {
+        "content": "ganti baca config dari file .ini kalo bisa ubah dari library sd3 \n",
+        "mime": "text/markdown"
+      },
+      "id": "1",
+      "prio": 1,
+      "references": [],
+      "title": "INI CONFIG READER"
+    }
+  ],
+  "in-progress": [
+    {
+      "assignedTo": {
+        "name": "BonifasiusM"
+      },
+      "category": "feature",
+      "creation_time": "2025-12-05T08:44:42.008Z",
+      "id": "2",
+      "prio": 1,
+      "references": [],
+      "title": "AUTOMATIC SWAGGER GEN"
+    }
+  ],
+  "testing": [],
+  "done": []
+}
