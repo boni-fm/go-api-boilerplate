@@ -4,6 +4,192 @@
         "contact": {}
     },
     "paths": {
+        "/api/users": {
+            "get": {
+                "description": "Retrieve a list of all registered users",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get all users",
+                "responses": {
+                    "200": {
+                        "description": "Users retrieved successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to fetch users",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new user account with username and password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Create a new user",
+                "parameters": [
+                    {
+                        "description": "User creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "User created successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request format",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/users/{user_name}": {
+            "delete": {
+                "description": "Delete a user account by username",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Delete a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username of the user to delete",
+                        "name": "user_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User deleted successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete user",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/users/{user_name}/password": {
+            "put": {
+                "description": "Update the password for a specific user by username",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Update user password",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username of the user to update",
+                        "name": "user_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New password",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateUserPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Password updated successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request format",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update password",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/ping": {
             "get": {
                 "description": "Ping Pong endpoint to check service availability",
@@ -23,17 +209,76 @@
                     }
                 }
             }
+        },
+        "/swagger": {
+            "get": {
+                "description": "Interactive Swagger UI for API documentation",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "_"
+                ],
+                "summary": "Swagger UI",
+                "responses": {}
+            }
+        },
+        "/swagger/doc.json": {
+            "get": {
+                "description": "Returns the Swagger/OpenAPI documentation in JSON format",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "_"
+                ],
+                "summary": "Swagger API Documentation",
+                "responses": {
+                    "200": {
+                        "description": "Swagger documentation",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "models.CreateUserRequest": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "password123"
+                },
+                "user_name": {
+                    "type": "string",
+                    "example": "john_doe"
+                }
+            }
+        },
         "models.PingPongResponse": {
             "type": "object",
             "properties": {
+                "is_success": {
+                    "type": "boolean"
+                },
                 "message": {
                     "type": "string"
                 },
                 "timestamp": {
                     "type": "string"
+                }
+            }
+        },
+        "models.UpdateUserPasswordRequest": {
+            "type": "object",
+            "properties": {
+                "new_password": {
+                    "type": "string",
+                    "example": "newpassword123"
                 }
             }
         }

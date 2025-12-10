@@ -21,3 +21,9 @@ Api Project
 
 Desember 02, 2025
 [+] Initial commit and file structure!
+
+Desember 08, 2025
+[+] Add swagger and basic endpoint (for aggregation uses)
+[=] Refactor middleware with depedency injection style code
+
+Desember 09, 2025

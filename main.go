@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go-api-boilerplate/config"
+	"go-api-boilerplate/internal/database"
 	"go-api-boilerplate/internal/middleware"
 	"go-api-boilerplate/internal/server"
 
@@ -19,6 +20,12 @@ func main() {
 	middlewareDeps := middleware.NewMiddlewareDepedencies(log_, srv.App, cfg.IsDevelopment)
 	srv.SetMiddlewareDeps(middlewareDeps)
 
+	// init database
+	database.InitDatabase(cfg.Kunci, log_)
+
+	// init services
+
+	// ------------------------------
 	// Mulai ~ 🤩
 	fmt.Println("Service started ~~ ༼ つ ◕_◕ ༽つ")
 	fmt.Println(`
@@ -27,5 +34,9 @@ func main() {
       └──────────────────────────────────────────┘
 	`)
 
-	srv.Start()
+	// ✅ mulai servernya ~
+	if err := srv.Start(); err != nil {
+		log_.Errorf("Server failed to start: %v", err)
+		panic(err)
+	}
 }

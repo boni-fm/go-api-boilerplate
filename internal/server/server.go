@@ -52,11 +52,11 @@ func (s *Server) SetMiddlewareDeps(middlewareDeps *middleware.MiddlewareDepedenc
 }
 
 func (s *Server) Start() error {
-	router.SetupRoutes(s.App)
+	s.MiddlewareDeps.InitAllMiddleware()
+	router.SetupRoutes(s.MiddlewareDeps.Log, s.App)
 	swagger.SwaggerSetup(s.App)
 
 	s.App.Static("/", "./static/public")
-	s.MiddlewareDeps.InitAllMiddleware()
 
 	return s.App.Listen(":" + s.Cfg.Port)
 }

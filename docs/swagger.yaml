@@ -1,14 +1,155 @@
 definitions:
+  models.CreateUserRequest:
+    properties:
+      password:
+        example: password123
+        type: string
+      user_name:
+        example: john_doe
+        type: string
+    type: object
   models.PingPongResponse:
     properties:
+      is_success:
+        type: boolean
       message:
         type: string
       timestamp:
         type: string
     type: object
+  models.UpdateUserPasswordRequest:
+    properties:
+      new_password:
+        example: newpassword123
+        type: string
+    type: object
 info:
   contact: {}
 paths:
+  /api/users:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all registered users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Users retrieved successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to fetch users
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with username and password
+      parameters:
+      - description: User creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request format
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new user
+      tags:
+      - users
+  /api/users/{user_name}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a user account by username
+      parameters:
+      - description: Username of the user to delete
+        in: path
+        name: user_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User deleted successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to delete user
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a user
+      tags:
+      - users
+  /api/users/{user_name}/password:
+    put:
+      consumes:
+      - application/json
+      description: Update the password for a specific user by username
+      parameters:
+      - description: Username of the user to update
+        in: path
+        name: user_name
+        required: true
+        type: string
+      - description: New password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateUserPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password updated successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request format
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to update password
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update user password
+      tags:
+      - users
   /ping:
     get:
       description: Ping Pong endpoint to check service availability
@@ -20,6 +161,29 @@ paths:
           schema:
             $ref: '#/definitions/models.PingPongResponse'
       summary: Ping Check
+      tags:
+      - _
+  /swagger:
+    get:
+      description: Interactive Swagger UI for API documentation
+      produces:
+      - text/html
+      responses: {}
+      summary: Swagger UI
+      tags:
+      - _
+  /swagger/doc.json:
+    get:
+      description: Returns the Swagger/OpenAPI documentation in JSON format
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Swagger documentation
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Swagger API Documentation
       tags:
       - _
 swagger: "2.0"

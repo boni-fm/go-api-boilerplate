@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"go-api-boilerplate/internal/api/models"
+	"go-api-boilerplate/internal/api/services"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,9 +15,13 @@ import (
 // @Produce json
 // @Success 200 {object} models.PingPongResponse "Pong response"
 // @Router /ping [get]
-func PingPongHandler(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) PingPongHandler(c *fiber.Ctx) error {
+	service := services.NewPingService()
+	message := service.GetPing()
+
 	response := models.PingPongResponse{
-		Message:   "Pong",
+		IsSuccess: true,
+		Message:   message,
 		Timestamp: time.Now(),
 	}
 
