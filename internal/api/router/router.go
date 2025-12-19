@@ -22,6 +22,9 @@ func SetupRoutes(log *log.Logger, app *fiber.App) {
 	app.Get("/swagger/doc.json", handlers.GetSwaggerDocumentation)
 	app.Get("/swagger", handlers.GetSwaggerUI)
 	app.Get("/swagger/*", handlers.GetSwaggerUI)
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Redirect("/swagger", fiber.StatusTemporaryRedirect)
+	})
 
 	// > user routes (example)
 	// User routes

@@ -9,10 +9,10 @@ import (
 // CRUD
 // CREATE
 func AddUser(ctx context.Context, user_name, user_password string) error {
-	query := `INSERT INTO dc_user_t (user_name, user_password) VALUES ($1, $2)`
-	err := database.Db.Query(ctx, query, user_name, user_password)
+	query := `INSERT INTO dc_user_t (user_name, user_password, user_app_modul) VALUES ($1, $2, 'GOLANG')`
+	_, err := database.Db.Exec(ctx, query, user_name, user_password)
 	if err != nil {
-		return err.Scan()
+		return err
 	}
 	return nil
 }
@@ -31,9 +31,9 @@ func GetAllUsers(ctx context.Context) ([]models.User, error) {
 // UPDATE
 func UpdateUserPassword(ctx context.Context, user_name, new_password string) error {
 	query := `UPDATE dc_user_t SET user_password = $1 WHERE user_name = $2`
-	err := database.Db.Query(ctx, query, new_password, user_name)
+	_, err := database.Db.Exec(ctx, query, new_password, user_name)
 	if err != nil {
-		return err.Scan()
+		return err
 	}
 	return nil
 }
@@ -41,9 +41,9 @@ func UpdateUserPassword(ctx context.Context, user_name, new_password string) err
 // DELETE
 func DeleteUser(ctx context.Context, user_name string) error {
 	query := `DELETE FROM dc_user_t WHERE user_name = $1`
-	err := database.Db.Query(ctx, query, user_name)
+	_, err := database.Db.Exec(ctx, query, user_name)
 	if err != nil {
-		return err.Scan()
+		return err
 	}
 	return nil
 }
