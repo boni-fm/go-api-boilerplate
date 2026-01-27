@@ -17,7 +17,7 @@ func main() {
 	// init semuanya!
 	fiberCfg := server.NewFiberConfig(cfg)
 	srv := server.NewServer(cfg, fiberCfg)
-	middlewareDeps := middleware.NewMiddlewareDepedencies(log_, srv.App, cfg.IsDevelopment)
+	middlewareDeps := middleware.NewMiddlewareDependencies(log_, srv.App, cfg.IsDevelopment)
 	srv.SetMiddlewareDeps(middlewareDeps)
 
 	// init database

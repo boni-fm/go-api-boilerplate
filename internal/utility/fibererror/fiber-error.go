@@ -2,13 +2,19 @@ package fibererror
 
 import "github.com/gofiber/fiber/v2"
 
+type ResponseError struct {
+	Code    int    `json:"code"`
+	Error   string `json:"error"`
+	Message string `json:"message"`
+}
+
 func GlobalErrorHandler(c *fiber.Ctx, err error) error {
 	if e, ok := err.(*fiber.Error); ok {
 		switch e.Code {
 		case fiber.StatusBadRequest:
 			return BadRequestError(err)(c)
 		case fiber.StatusGatewayTimeout:
-			return GateawayTimeoutError(err)(c)
+			return GatewayTimeoutError(err)(c)
 		case fiber.StatusNotFound:
 			return NotFoundError(c)
 		case fiber.StatusInternalServerError:
@@ -20,10 +26,10 @@ func GlobalErrorHandler(c *fiber.Ctx, err error) error {
 
 func InternalServerError(err error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"code":    fiber.StatusInternalServerError,
-			"error":   "Internal Server Error",
-			"message": err.Error(),
+		return c.Status(fiber.StatusInternalServerError).JSON(ResponseError{
+			Code:    fiber.StatusInternalServerError,
+			Error:   "Internal Server Error",
+			Message: err.Error(),
 		})
 	}
 }
@@ -38,7 +44,7 @@ func BadRequestError(err error) fiber.Handler {
 	}
 }
 
-func GateawayTimeoutError(err error) fiber.Handler {
+func GatewayTimeoutError(err error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusGatewayTimeout).JSON(fiber.Map{
 			"code":    fiber.StatusGatewayTimeout,

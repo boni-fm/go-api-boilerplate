@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
-	"github.com/gofiber/fiber/v2"
+	"path/filepath"
 )
 
-func SwaggerSetup(app *fiber.App) {
+func SwaggerSetup() {
 	cwd, err := os.Getwd()
 	if err == nil {
 		if _, err := exec.LookPath("swag"); err != nil {
@@ -25,4 +24,9 @@ func SwaggerSetup(app *fiber.App) {
 			}
 		}
 	}
+}
+
+func GetDocPath() string {
+	cwd, _ := os.Getwd()
+	return filepath.Join(cwd, "docs", "swagger.json")
 }

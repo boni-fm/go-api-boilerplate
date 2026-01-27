@@ -168,13 +168,18 @@ paths:
       description: Interactive Swagger UI for API documentation
       produces:
       - text/html
-      responses: {}
+      responses:
+        "200":
+          description: Swagger UI HTML
+          schema:
+            type: string
       summary: Swagger UI
       tags:
-      - _
+      - Swagger
   /swagger/doc.json:
     get:
-      description: Returns the Swagger/OpenAPI documentation in JSON format
+      description: Returns the Swagger/OpenAPI documentation in JSON format with proxy
+        path support
       produces:
       - application/json
       responses:
@@ -183,7 +188,13 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       summary: Swagger API Documentation
       tags:
-      - _
+      - Swagger
 swagger: "2.0"

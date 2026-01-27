@@ -1,37 +1,60 @@
 package handlers
 
 import (
-	"os"
-	"path/filepath"
+	"go-api-boilerplate/internal/utility/swagger"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/swagger"
+	fiberSwagger "github.com/gofiber/swagger"
 )
 
-// GetSwaggerDocumentation godoc
+// GetDocumentation godoc
 // @Summary Swagger API Documentation
-// @Description Returns the Swagger/OpenAPI documentation in JSON format
-// @Tags _
+// @Description Returns the Swagger/OpenAPI documentation in JSON format with proxy path support
+// @Tags Swagger
 // @Produce json
 // @Success 200 {object} map[string]interface{} "Swagger documentation"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /swagger/doc.json [get]
-func (hr *HandlersRegistry) GetSwaggerDocumentation(c *fiber.Ctx) error {
-	cwd, _ := os.Getwd()
-	return c.SendFile(filepath.Join(cwd, "docs", "swagger.json"), true)
+func (h *HandlersRegistry) GetSwaggerDocumentation(c *fiber.Ctx) error {
+	// Get proxy path from context (set by middleware)
+	proxyPath := swagger.GetProxyPath(c)
+
+	// Get modified swagger document
+	doc, err := h.SwaggerDoc.GetModifiedDocument(proxyPath)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to load swagger documentation",
+		})
+	}
+
+	return c.JSON(doc)
 }
 
-// GetSwaggerUI godoc
+// GetUI godoc
 // @Summary Swagger UI
 // @Description Interactive Swagger UI for API documentation
-// @Tags _
+// @Tags Swagger
 // @Produce html
+// @Success 200 {string} string "Swagger UI HTML"
 // @Router /swagger [get]
-func (hr *HandlersRegistry) GetSwaggerUI(c *fiber.Ctx) error {
-	return swagger.New(
-		swagger.Config{
-			URL:          "/swagger/doc.json",
+func (h *HandlersRegistry) GetSwaggerUI(c *fiber.Ctx) error {
+	// Get proxy path from context
+	proxyPath := swagger.GetProxyPath(c)
+
+	// Build doc URL with proxy path
+	docURL := "/swagger/doc.json"
+	if proxyPath != "" {
+		proxyPath = strings.TrimSuffix(proxyPath, "/")
+		docURL = proxyPath + "/swagger/doc.json"
+	}
+
+	return fiberSwagger.New(
+		fiberSwagger.Config{
+			URL:          docURL,
 			DeepLinking:  true,
 			DocExpansion: "none",
+			Title:        "API Documentation",
 		},
 	)(c)
 }

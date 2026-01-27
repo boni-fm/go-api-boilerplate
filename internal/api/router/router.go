@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"go-api-boilerplate/internal/api/handlers"
+	"go-api-boilerplate/internal/utility/swagger"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"github.com/gofiber/fiber/v2"
@@ -18,13 +19,19 @@ func SetupRoutes(log *log.Logger, app *fiber.App) {
 	//---
 
 	// > base routes
-	app.Get("/ping", handlers.PingPongHandler)
-	app.Get("/swagger/doc.json", handlers.GetSwaggerDocumentation)
-	app.Get("/swagger", handlers.GetSwaggerUI)
-	app.Get("/swagger/*", handlers.GetSwaggerUI)
+	app.Use("/swagger*", swagger.ProxyPathMiddleware())
 	app.Get("/", func(c *fiber.Ctx) error {
+		proxyPath := c.Get("X-Forwarded-Prefix", "")
+		if proxyPath != "" {
+			return c.Redirect(proxyPath+"/swagger", fiber.StatusTemporaryRedirect)
+		}
 		return c.Redirect("/swagger", fiber.StatusTemporaryRedirect)
 	})
+
+	app.Get("/ping", handlers.PingPongHandler)
+	app.Get("/swagger/doc.json", handlers.GetSwaggerDocumentation)
+	app.Get("/swagger/", handlers.GetSwaggerUI)
+	app.Get("/swagger/*", handlers.GetSwaggerUI)
 
 	// > user routes (example)
 	// User routes

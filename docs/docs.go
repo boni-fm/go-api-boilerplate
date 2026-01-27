@@ -228,20 +228,27 @@ const docTemplate = `{
                     "text/html"
                 ],
                 "tags": [
-                    "_"
+                    "Swagger"
                 ],
                 "summary": "Swagger UI",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "Swagger UI HTML",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
             }
         },
         "/swagger/doc.json": {
             "get": {
-                "description": "Returns the Swagger/OpenAPI documentation in JSON format",
+                "description": "Returns the Swagger/OpenAPI documentation in JSON format with proxy path support",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "_"
+                    "Swagger"
                 ],
                 "summary": "Swagger API Documentation",
                 "responses": {
@@ -250,6 +257,15 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
