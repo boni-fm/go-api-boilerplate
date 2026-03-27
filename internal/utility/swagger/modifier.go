@@ -12,11 +12,19 @@ type DocumentModifier struct {
 	docPath string
 }
 
-// NewDocumentModifier creates a new swagger document modifier
+// NewDocumentModifier creates a new DocumentModifier that reads from the
+// default docs/swagger.json location relative to the current working directory.
 func NewDocumentModifier() *DocumentModifier {
 	return &DocumentModifier{
 		docPath: GetDocPath(),
 	}
+}
+
+// NewDocumentModifierWithPath creates a DocumentModifier that reads from the
+// specified path. Use this in tests to avoid a dependency on the generated
+// swagger.json file in the project's docs/ directory.
+func NewDocumentModifierWithPath(docPath string) *DocumentModifier {
+	return &DocumentModifier{docPath: docPath}
 }
 
 // GetModifiedDocument reads and modifies swagger document based on proxy configuration
