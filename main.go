@@ -53,10 +53,14 @@ func main() {
 		}
 	case sig := <-quit:
 		log_.Infof("Received signal %v — initiating graceful shutdown...", sig)
+		// 1. Stop accepting new HTTP connections and let in-flight requests
+		//    finish (they may still submit background jobs to the pool).
 		if err := srv.App.ShutdownWithTimeout(10 * time.Second); err != nil {
 			log_.Errorf("Forced shutdown after timeout: %v", err)
 			os.Exit(1)
 		}
+		// 2. Drain the worker pool so no background tasks are abandoned.
+		srv.Pool.Stop()
 		log_.Info("Server exited gracefully.")
 	}
 }

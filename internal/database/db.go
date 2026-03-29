@@ -21,8 +21,9 @@ func InitDatabase(kunci string, log *log.Logger) {
 	}
 	db, err := postgres.NewDatabase(context.Background(), &dbcfg)
 	if err != nil {
-		// log.Panicf logs at panic level and then calls panic internally;
-		// a second explicit panic() call is therefore not needed.
+		// Logger embeds *logrus.Logger; logrus.Panicf logs at PanicLevel and
+		// then calls panic() internally — no separate panic() call is needed.
+		// See: github.com/sirupsen/logrus entry.go, log() method, PanicLevel branch.
 		log.Panicf("Failed to connect to database: %v", err)
 	}
 	Db = db

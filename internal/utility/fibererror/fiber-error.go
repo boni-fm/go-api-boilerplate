@@ -77,6 +77,10 @@ func BadRequestError(err error) fiber.Handler {
 
 // GatewayTimeoutError returns a handler that responds with HTTP 504 and a
 // ResponseError body with a standard upstream-timeout message.
+//
+// The Error field uses the canonical HTTP reason phrase "Gateway Timeout"
+// (matching net/http.StatusText(504)) for consistency with the default case
+// in GlobalErrorHandler. Descriptive context is carried by the Message field.
 func GatewayTimeoutError(err error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusGatewayTimeout).JSON(ResponseError{

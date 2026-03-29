@@ -3,6 +3,7 @@ package router
 import (
 	"go-api-boilerplate/internal/api/handlers"
 	"go-api-boilerplate/internal/utility/swagger"
+	"go-api-boilerplate/internal/worker"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"github.com/gofiber/fiber/v2"
@@ -10,9 +11,9 @@ import (
 
 // SetupRoutes registers all application routes on the provided Fiber app.
 // All handlers are constructed via NewHandlersRegistry which wires their
-// dependencies (repository, service, swagger utilities) automatically.
-func SetupRoutes(log *log.Logger, app *fiber.App) {
-	handlers := handlers.NewHandlersRegistry(log)
+// dependencies (repository, service, swagger utilities, worker pool) automatically.
+func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool) {
+	handlers := handlers.NewHandlersRegistry(log, pool)
 
 	//---
 	// setup routing disini
