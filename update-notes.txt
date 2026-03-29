@@ -6,10 +6,12 @@ Api Project
   -.OK http req/res logger 
      :: https://github.com/bigunmd/fiberlogrus
   -. reverse proxy
-  -.OK healthcheck
+  -.OK healthcheck (/live + /ready)
   -.OK 404 handler
   -.OK recover 
      :: https://github.com/gofiber/fiber/tree/v2/middleware/recover
+  -.OK request-id (UUIDv4 X-Request-ID correlation header)
+  -.OK timeout (30s context deadline per request)
   -. auth (jwt) // optional
 - docs
   -. automatic swagger gen
@@ -18,6 +20,8 @@ Api Project
   -. health check
   -. pingpong
   -. docs (untuk aggregator)
+- worker pool (bounded background goroutine pool)
+- docker (multi-stage alpine image, non-root user)
 
 Desember 02, 2025
 [+] Initial commit and file structure!
@@ -27,3 +31,34 @@ Desember 08, 2025
 [=] Refactor middleware with depedency injection style code
 
 Desember 09, 2025
+[+] Add user CRUD endpoints (create, get all, update password, delete)
+[+] Add PostgreSQL repository layer with pgx/scany
+[+] Add layered architecture: handler → service → repository
+[+] Add bcrypt password hashing in UserService
+[+] Add GlobalErrorHandler with consistent ResponseError envelope
+[=] Refactor server into internal/server package
+
+Maret 27, 2026
+[+] Write comprehensive README.md for developer onboarding
+[+] Add appsettings.ini with example configuration
+[+] Document all API endpoints, project structure, and middleware
+
+Maret 29, 2026  [Boilerplate 2.0]
+[+] Add RequestIDMiddleware — UUIDv4 X-Request-ID header for log correlation
+[+] Add TimeoutMiddleware — 30s context deadline on every request
+[+] Add /ready readiness probe that pings PostgreSQL (2s timeout)
+[+] Add bounded background worker pool (internal/worker.Pool)
+     :: defaultWorkerCount=4, defaultWorkerCapacity=128
+[+] Add multi-stage Dockerfile (golang:1.24-alpine → alpine:3.21, non-root user)
+[+] Add .dockerignore
+[=] Update middleware registration order: RequestID → Logger → Recover →
+     Timeout → HealthCheck → Favicon → RateLimiter
+[=] Refactor HandlersRegistry to accept worker.Pool for background tasks
+[=] Update GlobalErrorHandler: add default case using net/http.StatusText
+[=] Update ResponseError envelope: BadRequestError and GatewayTimeoutError
+     now use typed ResponseError struct
+[=] Replace custom recover middleware with Fiber built-in + stack trace logging
+[x] Remove dead code: UpdateUserPassword empty-userName guard (unreachable path)
+[+] Add developer handbook (docs/developer-handbook.md) with audit results,
+     architecture diagram, step-by-step feature guide, and production checklist
+[+] Add tests: requestid_test.go, timeout_test.go, recover_test.go, pool_test.go
