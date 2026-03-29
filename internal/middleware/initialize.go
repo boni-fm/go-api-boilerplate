@@ -19,10 +19,25 @@ func NewMiddlewareDependencies(log *log.Logger, app *fiber.App, isDevelopment bo
 	}
 }
 
+// InitAllMiddleware registers all global middleware in the correct order.
+//
+// Order matters:
+//  1. RequestID  — must be first so every subsequent log line, error response
+//     and downstream service call can include the correlation ID.
+//  2. Logger     — logs the request after RequestID is set.
+//  3. Recover    — catches panics and returns a standard error response.
+//  4. Timeout    — wraps each request's context with a deadline so DB queries
+//     and outbound I/O do not block indefinitely.
+//  5. HealthCheck — /live and /ready probes (must precede rate limiter so
+//     probes are never rate-limited).
+//  6. Favicon    — serves favicon without hitting the router.
+//  7. RateLimiter — protects downstream handlers from excessive traffic.
 func (md *MiddlewareDependencies) InitAllMiddleware() {
 	md.App.Use(
+		RequestIDMiddleware(),
 		LoggerMiddleware(md.Log.Logger),
 		RecoverMiddleware(md.Log),
+		TimeoutMiddleware(defaultRequestTimeout),
 		HealthCheckMiddleware(),
 		FaviconMiddleware(),
 		RateLimiter(md.Log.Logger),

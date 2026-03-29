@@ -15,7 +15,7 @@ type UpdateUserPasswordRequest struct {
 }
 
 type UserResponse struct {
-	UserName string `json:"user_name" example:"john_doe"`
+	UserName string `json:"user_name" db:"user_name" example:"john_doe"`
 }
 
 type UsersListResponse struct {
