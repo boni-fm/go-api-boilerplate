@@ -27,6 +27,9 @@ template to build a new microservice.
 | 3 | **Fragile recover middleware** | Custom `defer`-based recover: (a) silently discarded write errors (`_ = c.JSON(…)`), (b) bypassed `GlobalErrorHandler`, (c) had no stack-trace capture | Replaced with Fiber's built-in `middleware/recover` + `runtime/debug.Stack()` logging |
 | 4 | **Unbounded goroutine growth** | No mechanism to cap background goroutines — a sudden traffic spike creating background tasks would grow goroutine count without bound | Added bounded `worker.Pool` (fixed workers + buffered channel with load-shedding) |
 | 5 | **Dead code** | `UpdateUserPassword` checked `userName == ""` — a path Fiber's `:user_name` route pattern can never produce | Removed |
+| 6 | **No request tracing** | No correlation ID on requests — impossible to trace a single request through logs across middleware, handler, and service layers | Added `RequestIDMiddleware` (UUIDv4, sets `X-Request-ID` header + context locals) |
+| 7 | **No context timeout propagation** | DB queries used raw context without deadlines — a slow query could block a handler goroutine indefinitely | Added `TimeoutMiddleware` (30 s default deadline on every request's `UserContext`) |
+| 8 | **No readiness probe** | Only a liveness probe (`/live`) — Kubernetes/load-balancer had no way to detect a service that was up but couldn't reach the database | Added `/ready` probe that pings PostgreSQL with a 2 s timeout |
 
 ### 1.2 Rating
 
@@ -46,8 +49,8 @@ HTTP Request
      ▼
 ┌──────────────────────────────────────────────────┐
 │  Fiber Middleware Stack                           │
-│  (Logger → Recover → HealthCheck → Favicon       │
-│   → RateLimiter)                                  │
+│  (RequestID → Logger → Recover → Timeout         │
+│   → HealthCheck → Favicon → RateLimiter)          │
 └────────────────┬─────────────────────────────────┘
                  │
                  ▼
@@ -109,6 +112,14 @@ HTTP Request
 │   │   └── services/           # Business logic layer
 │   ├── database/               # DB pool initialisation
 │   ├── middleware/             # Fiber middleware registrations
+│   │   ├── initialize.go      # Middleware dependency graph + registration order
+│   │   ├── requestid.go       # X-Request-ID generation (UUIDv4) ← NEW in 2.0
+│   │   ├── timeout.go         # Context deadline propagation (30 s) ← NEW in 2.0
+│   │   ├── health-check.go    # /live + /ready (DB ping) probes ← UPDATED in 2.0
+│   │   ├── recover.go         # Panic recovery with stack traces
+│   │   ├── ratelimiter.go     # 100 req/min per IP
+│   │   ├── logger.go          # HTTP request logging (fiberlogrus)
+│   │   └── favicon.go         # Static favicon serving
 │   ├── server/                 # Fiber app construction + lifecycle
 │   ├── utility/
 │   │   ├── fibererror/         # ResponseError envelope + GlobalErrorHandler
@@ -118,6 +129,8 @@ HTTP Request
 │       └── pool_test.go
 ├── static/public/              # Static files (favicon, 404 page)
 ├── appsettings.ini             # Non-secret runtime config
+├── Dockerfile                  # Multi-stage production build ← NEW in 2.0
+├── .dockerignore               # Files excluded from Docker context
 ├── go.mod / go.sum
 └── main.go                     # Entry point: wire → start → graceful shutdown
 ```
