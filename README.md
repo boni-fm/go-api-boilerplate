@@ -12,7 +12,11 @@ A production-ready Go REST API boilerplate built on top of the [Fiber](https://g
 - **Structured logging** – File-based rotating logs via `logrus` + `go-libsd3`
 - **Rate limiting** – 100 requests per minute per client
 - **Panic recovery** – Catches panics and returns a clean 500 JSON response
-- **Health check** – Liveness probe at `/live`
+- **Request tracing** – UUIDv4 `X-Request-ID` header added to every request for log correlation
+- **Context timeouts** – 30-second deadline propagated to every request's context so DB queries and I/O never block indefinitely
+- **Health probes** – Liveness at `/live`, readiness (with DB ping) at `/ready`
+- **Background worker pool** – Bounded goroutine pool for non-critical fire-and-forget tasks (audit logs, events, emails)
+- **Docker support** – Multi-stage `Dockerfile` produces a minimal, non-root Alpine image
 - **Reverse-proxy aware** – Reads `X-Forwarded-Prefix` to adjust Swagger base path
 - **INI-based config** – Simple `appsettings.ini` configuration
 - **Layered architecture** – Handler → Service → Repository separation
@@ -86,6 +90,8 @@ Open `http://localhost:8080/swagger` to view the interactive API documentation.
 go-api-boilerplate/
 ├── main.go                        # Application entry point
 ├── appsettings.ini                # Runtime configuration
+├── Dockerfile                     # Multi-stage production Docker build
+├── .dockerignore
 ├── go.mod / go.sum
 │
 ├── config/
@@ -100,6 +106,7 @@ go-api-boilerplate/
 │   ├── api/
 │   │   ├── handlers/              # HTTP handler functions
 │   │   │   ├── BaseHandler.go     # HandlersRegistry (dependency container)
+│   │   │   ├── interfaces.go      # Handler service interfaces
 │   │   │   ├── PingHandler.go
 │   │   │   ├── UserHandler.go
 │   │   │   └── DocumentationSwaggerHandler.go
@@ -118,12 +125,20 @@ go-api-boilerplate/
 │   │   └── db.go                  # PostgreSQL connection initializer
 │   │
 │   ├── middleware/
-│   │   ├── initialize.go          # Middleware wiring
+│   │   ├── initialize.go          # Middleware wiring (registration order)
+│   │   ├── requestid.go           # UUIDv4 X-Request-ID correlation header
+│   │   ├── timeout.go             # 30 s context deadline per request
 │   │   ├── favicon.go
-│   │   ├── health-check.go
+│   │   ├── health-check.go        # /live and /ready probes
 │   │   ├── logger.go
 │   │   ├── ratelimiter.go
 │   │   └── recover.go
+│   │
+│   ├── server/
+│   │   └── server.go              # Fiber app construction & lifecycle
+│   │
+│   ├── worker/
+│   │   └── pool.go                # Bounded background goroutine pool
 │   │
 │   └── utility/
 │       ├── fibererror/            # Global error handler + helpers
@@ -147,7 +162,8 @@ go-api-boilerplate/
 |--------|------|-------------|
 | `GET` | `/` | Redirects to Swagger UI |
 | `GET` | `/ping` | Liveness check – returns `{ "message": "Pong" }` |
-| `GET` | `/live` | Health-check probe (returns `200 OK`) |
+| `GET` | `/live` | Liveness probe (returns `200 OK` when the process is running) |
+| `GET` | `/ready` | Readiness probe (returns `200 OK` only when PostgreSQL is reachable) |
 | `GET` | `/swagger` | Interactive Swagger UI |
 | `GET` | `/swagger/doc.json` | Raw OpenAPI JSON |
 
@@ -261,15 +277,68 @@ swag init -g main.go -o docs
 
 ## Middleware
 
-All middleware is registered in `internal/middleware/initialize.go`:
+All middleware is registered in `internal/middleware/initialize.go` in the following order:
 
-| Middleware | Description |
-|------------|-------------|
-| **Logger** | Structured HTTP request/response logging (logrus) |
-| **Recover** | Catches panics, logs them, returns `500` JSON |
-| **HealthCheck** | `GET /live` → `200 OK` liveness probe |
-| **Favicon** | Serves `/domar.ico` from `static/public/favicon.ico` |
-| **RateLimiter** | 100 requests / 60 seconds per IP |
+| # | Middleware | Description |
+|---|------------|-------------|
+| 1 | **RequestID** | Generates a UUIDv4 `X-Request-ID` header (or propagates an incoming one) for log correlation |
+| 2 | **Logger** | Structured HTTP request/response logging (logrus) |
+| 3 | **Recover** | Catches panics, logs stack traces, returns `500` JSON |
+| 4 | **Timeout** | Wraps each request's context with a 30 s deadline so DB queries and I/O are cancelled automatically |
+| 5 | **HealthCheck** | `GET /live` → `200 OK` liveness probe; `GET /ready` → `200 OK` only when PostgreSQL responds |
+| 6 | **Favicon** | Serves `/domar.ico` from `static/public/favicon.ico` |
+| 7 | **RateLimiter** | 100 requests / 60 seconds per IP |
+
+> **Note:** HealthCheck is placed *before* RateLimiter so that Kubernetes liveness/readiness probes are never rate-limited.
+
+---
+
+## Running with Docker
+
+Build and run the application in a minimal, non-root Alpine container:
+
+```bash
+# Build the image
+docker build -t go-api-boilerplate .
+
+# Run (pass your database key as an environment variable)
+docker run -p 8080:8080 \
+  -e APP_CONFIG_KUNCI=<your-database-key> \
+  go-api-boilerplate
+```
+
+The `Dockerfile` uses a two-stage build:
+
+1. **Builder stage** (`golang:1.24-alpine`) – compiles a fully-static binary with `CGO_ENABLED=0`.
+2. **Runtime stage** (`alpine:3.21`) – copies only the binary and static assets; runs as a non-root user (`appuser`).
+
+The image exposes port `8080` and includes a Docker `HEALTHCHECK` that hits `/live` every 10 seconds.
+
+---
+
+## Background Worker Pool
+
+The worker pool (`internal/worker.Pool`) allows handlers to dispatch non-critical side-effects asynchronously without blocking the HTTP response:
+
+```go
+if hr.Pool != nil {
+    ok := hr.Pool.Submit(func(ctx context.Context) {
+        // e.g. write audit log, publish event, flush metric batch
+    })
+    if !ok {
+        hr.log_.Warn("worker pool saturated — task dropped")
+    }
+}
+```
+
+The pool is bounded: it has a fixed number of worker goroutines and a buffered job channel. When the channel is full, `Submit` returns `false` (load-shedding) instead of growing unboundedly.
+
+Tune the pool in `internal/server/server.go`:
+
+| Constant | Default | Guidance |
+|---|---|---|
+| `defaultWorkerCount` | 4 | ≈ 2× the number of background task types |
+| `defaultWorkerCapacity` | 128 | `(peak tasks/sec) × (max acceptable latency in seconds)` |
 
 ---
 
