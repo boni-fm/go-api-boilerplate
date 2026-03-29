@@ -47,6 +47,12 @@ func TestGlobalErrorHandler_FiberBadRequest(t *testing.T) {
 	if body["error"] != "Bad Request" {
 		t.Errorf("error field: got %v, want \"Bad Request\"", body["error"])
 	}
+	// BadRequestError must use ResponseError — verify all three fields are present.
+	for _, key := range []string{"code", "error", "message"} {
+		if body[key] == nil {
+			t.Errorf("expected key %q in bad-request response body", key)
+		}
+	}
 }
 
 func TestGlobalErrorHandler_FiberNotFound(t *testing.T) {
@@ -60,10 +66,11 @@ func TestGlobalErrorHandler_FiberNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// NotFoundError serves a static file which may not exist in test env,
-	// so we only verify the handler is called (no 200 returned).
-	if resp.StatusCode == http.StatusOK {
-		t.Error("expected non-200 status for NotFound handler")
+	// NotFoundError calls c.Status(404).SendFile("./static/public/404.html").
+	// When the static file does not exist (as in the test environment), fasthttp
+	// sends a bare HTTP 404 response, so we assert the status code directly.
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 
@@ -82,8 +89,14 @@ func TestGlobalErrorHandler_FiberGatewayTimeout(t *testing.T) {
 		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusGatewayTimeout)
 	}
 	body := decodeBody(t, resp.Body)
-	if body["error"] == nil {
-		t.Error("expected error field in response body")
+	// GatewayTimeoutError must use ResponseError — verify all three fields are present.
+	for _, key := range []string{"code", "error", "message"} {
+		if body[key] == nil {
+			t.Errorf("expected key %q in gateway-timeout response body", key)
+		}
+	}
+	if body["error"] != "Gateway Timeout" {
+		t.Errorf("error field: got %v, want \"Gateway Timeout\"", body["error"])
 	}
 }
 
@@ -104,6 +117,54 @@ func TestGlobalErrorHandler_GenericError(t *testing.T) {
 	body := decodeBody(t, resp.Body)
 	if body["code"] != float64(500) {
 		t.Errorf("code field: got %v, want 500", body["code"])
+	}
+}
+
+// TestGlobalErrorHandler_UnhandledFiberError_PreservesStatusCode is the regression
+// test for the critical bug where any Fiber error code not explicitly listed in the
+// switch (e.g. 401, 403, 405, 408, 413, 429) was previously misrouted to
+// InternalServerError, returning HTTP 500 instead of the correct status.
+func TestGlobalErrorHandler_UnhandledFiberError_PreservesStatusCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       int
+		wantError  string
+		wantStatus int
+	}{
+		{"unauthorized", fiber.StatusUnauthorized, "Unauthorized", http.StatusUnauthorized},
+		{"forbidden", fiber.StatusForbidden, "Forbidden", http.StatusForbidden},
+		{"method not allowed", fiber.StatusMethodNotAllowed, "Method Not Allowed", http.StatusMethodNotAllowed},
+		{"conflict", fiber.StatusConflict, "Conflict", http.StatusConflict},
+		{"too many requests", fiber.StatusTooManyRequests, "Too Many Requests", http.StatusTooManyRequests},
+		{"unprocessable entity", fiber.StatusUnprocessableEntity, "Unprocessable Entity", http.StatusUnprocessableEntity},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newTestApp()
+			code := tc.code // capture for closure
+			app.Get("/test", func(c *fiber.Ctx) error {
+				return fiber.NewError(code, "detail")
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Errorf("HTTP status: got %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+
+			body := decodeBody(t, resp.Body)
+			if body["code"] != float64(tc.wantStatus) {
+				t.Errorf("code field: got %v, want %d", body["code"], tc.wantStatus)
+			}
+			if body["error"] != tc.wantError {
+				t.Errorf("error field: got %v, want %q", body["error"], tc.wantError)
+			}
+		})
 	}
 }
 

@@ -95,13 +95,6 @@ func (hr *HandlersRegistry) GetUsers(c *fiber.Ctx) error {
 // @Router /api/users/{user_name}/password [put]
 func (hr *HandlersRegistry) UpdateUserPassword(c *fiber.Ctx) error {
 	userName := c.Params("user_name")
-	if userName == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: "user_name path parameter is required",
-		})
-	}
 
 	var req models.UpdateUserPasswordRequest
 	if err := c.BodyParser(&req); err != nil {
