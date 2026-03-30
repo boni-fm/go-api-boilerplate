@@ -6,7 +6,7 @@ package fibererror
 import (
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // ResponseError is the canonical error envelope returned by every API endpoint.
@@ -26,7 +26,7 @@ type ResponseError struct {
 // status code. Without it, any Fiber error not explicitly listed (e.g. 401, 403,
 // 405, 408, 413, 429) would be incorrectly returned as HTTP 500, making real
 // client errors impossible to diagnose in production.
-func GlobalErrorHandler(c *fiber.Ctx, err error) error {
+func GlobalErrorHandler(c fiber.Ctx, err error) error {
 	if e, ok := err.(*fiber.Error); ok {
 		switch e.Code {
 		case fiber.StatusBadRequest:
@@ -54,7 +54,7 @@ func GlobalErrorHandler(c *fiber.Ctx, err error) error {
 // InternalServerError returns a handler that responds with HTTP 500 and a
 // ResponseError body containing the error detail.
 func InternalServerError(err error) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(ResponseError{
 			Code:    fiber.StatusInternalServerError,
 			Error:   "Internal Server Error",
@@ -66,7 +66,7 @@ func InternalServerError(err error) fiber.Handler {
 // BadRequestError returns a handler that responds with HTTP 400 and a
 // ResponseError body containing the error detail.
 func BadRequestError(err error) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(ResponseError{
 			Code:    fiber.StatusBadRequest,
 			Error:   "Bad Request",
@@ -82,7 +82,7 @@ func BadRequestError(err error) fiber.Handler {
 // (matching net/http.StatusText(504)) for consistency with the default case
 // in GlobalErrorHandler. Descriptive context is carried by the Message field.
 func GatewayTimeoutError(err error) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusGatewayTimeout).JSON(ResponseError{
 			Code:    fiber.StatusGatewayTimeout,
 			Error:   "Gateway Timeout",
@@ -92,6 +92,6 @@ func GatewayTimeoutError(err error) fiber.Handler {
 }
 
 // NotFoundError responds with HTTP 404 by serving the static 404 page.
-func NotFoundError(c *fiber.Ctx) error {
+func NotFoundError(c fiber.Ctx) error {
 	return c.Status(fiber.StatusNotFound).SendFile("./static/public/404.html")
 }

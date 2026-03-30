@@ -9,7 +9,7 @@ import (
 
 	"go-api-boilerplate/internal/utility/fibererror"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // newTestApp returns a minimal Fiber app that uses GlobalErrorHandler.
@@ -31,7 +31,7 @@ func decodeBody(t *testing.T, body io.Reader) map[string]interface{} {
 
 func TestGlobalErrorHandler_FiberBadRequest(t *testing.T) {
 	app := newTestApp()
-	app.Get("/bad", func(c *fiber.Ctx) error {
+	app.Get("/bad", func(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "bad input")
 	})
 
@@ -57,7 +57,7 @@ func TestGlobalErrorHandler_FiberBadRequest(t *testing.T) {
 
 func TestGlobalErrorHandler_FiberNotFound(t *testing.T) {
 	app := newTestApp()
-	app.Get("/nf", func(c *fiber.Ctx) error {
+	app.Get("/nf", func(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "not found")
 	})
 
@@ -76,7 +76,7 @@ func TestGlobalErrorHandler_FiberNotFound(t *testing.T) {
 
 func TestGlobalErrorHandler_FiberGatewayTimeout(t *testing.T) {
 	app := newTestApp()
-	app.Get("/timeout", func(c *fiber.Ctx) error {
+	app.Get("/timeout", func(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusGatewayTimeout, "upstream timeout")
 	})
 
@@ -102,7 +102,7 @@ func TestGlobalErrorHandler_FiberGatewayTimeout(t *testing.T) {
 
 func TestGlobalErrorHandler_GenericError(t *testing.T) {
 	app := newTestApp()
-	app.Get("/panic", func(c *fiber.Ctx) error {
+	app.Get("/panic", func(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "something broke")
 	})
 
@@ -143,7 +143,7 @@ func TestGlobalErrorHandler_UnhandledFiberError_PreservesStatusCode(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			app := newTestApp()
 			code := tc.code // capture for closure
-			app.Get("/test", func(c *fiber.Ctx) error {
+			app.Get("/test", func(c fiber.Ctx) error {
 				return fiber.NewError(code, "detail")
 			})
 

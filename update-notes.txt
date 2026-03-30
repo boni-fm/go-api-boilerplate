@@ -3,13 +3,12 @@ Api Project
 - log service {libsd3}
 - db {libsd3}
 - middleware
-  -.OK http req/res logger 
-     :: https://github.com/bigunmd/fiberlogrus
+  -.OK http req/res logger (custom logrus-based middleware, fiber v3 native)
   -. reverse proxy
-  -.OK healthcheck (/live + /ready)
+  -.OK healthcheck (/live + /ready as route-level handlers)
   -.OK 404 handler
   -.OK recover 
-     :: https://github.com/gofiber/fiber/tree/v2/middleware/recover
+     :: https://github.com/gofiber/fiber/tree/v3/middleware/recover
   -.OK request-id (UUIDv4 X-Request-ID correlation header)
   -.OK timeout (30s context deadline per request)
   -. auth (jwt) // optional
@@ -44,7 +43,6 @@ Maret 27, 2026
 [+] Document all API endpoints, project structure, and middleware
 
 Maret 29, 2026  [Boilerplate 2.0]
-[+] Add RequestIDMiddleware — UUIDv4 X-Request-ID header for log correlation
 [+] Add TimeoutMiddleware — 30s context deadline on every request
 [+] Add /ready readiness probe that pings PostgreSQL (2s timeout)
 [+] Add bounded background worker pool (internal/worker.Pool)
@@ -62,3 +60,29 @@ Maret 29, 2026  [Boilerplate 2.0]
 [+] Add developer handbook (docs/developer-handbook.md) with audit results,
      architecture diagram, step-by-step feature guide, and production checklist
 [+] Add tests: requestid_test.go, timeout_test.go, recover_test.go, pool_test.go
+
+Maret 30, 2026  [Fiber v3 Migration]
+[=] Upgrade Go 1.24.6 → 1.25.8 (toolchain directive in go.mod)
+[=] Upgrade Go Fiber v2.52.10 → v3.1.0
+     :: import path: github.com/gofiber/fiber/v2 → github.com/gofiber/fiber/v3
+[x] Remove github.com/gofiber/swagger (v2-only) → replaced by swaggo/http-swagger/v2
+     via Fiber v3's built-in adaptor middleware
+[x] Remove github.com/mikhail-bigun/fiberlogrus (v2-only) → replaced by a minimal
+     custom logrus HTTP logger middleware (internal/middleware/logger.go)
+[=] Migrate handler signature: func(c *fiber.Ctx) error → func(c fiber.Ctx) error
+     (Ctx is now an interface in v3; no pointer receiver needed)
+[=] Migrate context API: c.UserContext() → c.Context(),
+     c.SetUserContext(ctx) → c.SetContext(ctx)
+[=] Migrate request binding: c.BodyParser(&req) → c.Bind().Body(&req)
+[=] Migrate requestid middleware: remove string ContextKey; access via
+     requestid.FromContext(c) instead of c.Locals("requestid")
+[=] Migrate healthcheck middleware: unified config (Liveness+Readiness) removed;
+     register individual route handlers GET /live and GET /ready in the router
+[=] Migrate app.Static("/", ...) → middleware/static registered as GET /* catch-all
+[=] Migrate DisableStartupMessage from fiber.Config → ListenConfig parameter
+[=] Update RateLimiter: add Next func to skip /live and /ready health probes
+[=] Update all tests: app.Test(req, 5000) → app.Test(req, fiber.TestConfig{Timeout: 5s})
+[=] Update middleware registration order: RequestID → Logger → Recover → Timeout →
+     Favicon → RateLimiter (HealthCheck moved to route level)
+[+] Add Immutable: true to fiber.Config — prevents zero-allocation data corruption
+     when context values (c.Params, c.Query, c.Get) are captured by worker pool tasks

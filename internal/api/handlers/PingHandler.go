@@ -5,7 +5,7 @@ import (
 	"go-api-boilerplate/internal/api/services"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // Ping godoc
@@ -15,7 +15,7 @@ import (
 // @Produce json
 // @Success 200 {object} models.PingPongResponse "Pong response"
 // @Router /ping [get]
-func (hr *HandlersRegistry) PingPongHandler(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) PingPongHandler(c fiber.Ctx) error {
 	service := services.NewPingService()
 	message := service.GetPing()
 

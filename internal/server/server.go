@@ -10,7 +10,8 @@ import (
 	"go-api-boilerplate/internal/worker"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/static"
 )
 
 // defaultWorkerCount is the number of goroutines in the background worker pool.
@@ -23,14 +24,13 @@ const defaultWorkerCount = 4
 const defaultWorkerCapacity = 128
 
 type FiberConfig struct {
-	AppName               string
-	DisableStartupMessage bool
-	CaseSensitive         bool
-	ErrorHandler          fiber.ErrorHandler
-	ReadTimeout           time.Duration
-	WriteTimeout          time.Duration
-	IdleTimeout           time.Duration
-	BodyLimit             int
+	AppName       string
+	CaseSensitive bool
+	ErrorHandler  fiber.ErrorHandler
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	IdleTimeout   time.Duration
+	BodyLimit     int
 }
 
 // Server owns the Fiber application, its configuration, the middleware
@@ -48,24 +48,28 @@ type Server struct {
 
 func NewFiberConfig(cfg config.Config) *FiberConfig {
 	return &FiberConfig{
-		AppName:               cfg.AppName,
-		DisableStartupMessage: false,
-		CaseSensitive:         false,
-		ErrorHandler:          fibererror.GlobalErrorHandler,
-		ReadTimeout:           15 * time.Second,
-		WriteTimeout:          15 * time.Second,
-		IdleTimeout:           60 * time.Second,
-		BodyLimit:             4 * 1024 * 1024, // 4 MB
+		AppName:       cfg.AppName,
+		CaseSensitive: false,
+		ErrorHandler:  fibererror.GlobalErrorHandler,
+		ReadTimeout:   15 * time.Second,
+		WriteTimeout:  15 * time.Second,
+		IdleTimeout:   60 * time.Second,
+		BodyLimit:     4 * 1024 * 1024, // 4 MB
 	}
 }
 
 func NewServer(cfg config.Config, fiberCfg *FiberConfig) *Server {
-	// start servernya
 	app := fiber.New(fiber.Config{
-		AppName:               fiberCfg.AppName,
-		DisableStartupMessage: fiberCfg.DisableStartupMessage,
-		CaseSensitive:         fiberCfg.CaseSensitive,
-		ErrorHandler:          fiberCfg.ErrorHandler,
+		AppName:       fiberCfg.AppName,
+		CaseSensitive: fiberCfg.CaseSensitive,
+		ErrorHandler:  fiberCfg.ErrorHandler,
+
+		// Immutable must be true because handlers may pass context-derived
+		// values (c.Params(), c.Query(), c.Get()) into the worker pool for
+		// background processing. Without this flag, those values are backed
+		// by mutable fasthttp byte slices that are recycled after the handler
+		// returns, causing silent data corruption in background tasks.
+		Immutable: true,
 
 		// Setup timeouts and body limits
 		ReadTimeout:  fiberCfg.ReadTimeout,
@@ -97,7 +101,13 @@ func (s *Server) Start() error {
 		swagger.SwaggerSetup()
 	}
 
-	s.App.Static("/", "./static/public")
+	// In Fiber v3 app.Static() was removed. Static files are served via the
+	// static middleware registered as a catch-all route so that more specific
+	// routes (API, swagger, health probes) take precedence.
+	s.App.Get("/*", static.New("./static/public"))
 
-	return s.App.Listen(":" + s.Cfg.Port)
+	// DisableStartupMessage was moved from fiber.Config to ListenConfig in v3.
+	return s.App.Listen(":"+s.Cfg.Port, fiber.ListenConfig{
+		DisableStartupMessage: false,
+	})
 }

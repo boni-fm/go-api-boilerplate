@@ -6,7 +6,7 @@ A production-ready Go REST API boilerplate built on top of the [Fiber](https://g
 
 ## Features
 
-- **[Fiber v2](https://gofiber.io/)** – Fast, Express-inspired HTTP framework
+- **[Fiber v3](https://gofiber.io/)** – Fast, Express-inspired HTTP framework
 - **PostgreSQL** – Database integration via `pgx` / `go-libsd3`
 - **Swagger / OpenAPI** – Auto-generated docs with proxy-path support
 - **Structured logging** – File-based rotating logs via `logrus` + `go-libsd3`
@@ -27,7 +27,7 @@ A production-ready Go REST API boilerplate built on top of the [Fiber](https://g
 
 | Tool | Version |
 |------|---------|
-| Go   | 1.24+   |
+| Go   | 1.25+   |
 | PostgreSQL | 13+ |
 | [swag CLI](https://github.com/swaggo/swag) | latest |
 
@@ -309,7 +309,7 @@ docker run -p 8080:8080 \
 
 The `Dockerfile` uses a two-stage build:
 
-1. **Builder stage** (`golang:1.24-alpine`) – compiles a fully-static binary with `CGO_ENABLED=0`.
+1. **Builder stage** (`golang:1.25-alpine`) – compiles a fully-static binary with `CGO_ENABLED=0`.
 2. **Runtime stage** (`alpine:3.21`) – copies only the binary and static assets; runs as a non-root user (`appuser`).
 
 The image exposes port `8080` and includes a Docker `HEALTHCHECK` that hits `/live` every 10 seconds.

@@ -12,7 +12,7 @@ import (
 	"go-api-boilerplate/internal/api/models"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestPingPongHandler_Returns200(t *testing.T) {
@@ -22,7 +22,7 @@ func TestPingPongHandler_Returns200(t *testing.T) {
 	app.Get("/ping", hr.PingPongHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestPingPongHandler_ResponseShape(t *testing.T) {
 	app.Get("/ping", hr.PingPongHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}

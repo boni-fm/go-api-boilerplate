@@ -7,13 +7,13 @@ import (
 
 	"go-api-boilerplate/internal/utility/swagger"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestProxyPathMiddleware_WithHeader(t *testing.T) {
 	app := fiber.New()
 	app.Use(swagger.ProxyPathMiddleware())
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		path := swagger.GetProxyPath(c)
 		return c.SendString(path)
 	})
@@ -37,7 +37,7 @@ func TestProxyPathMiddleware_WithHeader(t *testing.T) {
 func TestProxyPathMiddleware_WithoutHeader(t *testing.T) {
 	app := fiber.New()
 	app.Use(swagger.ProxyPathMiddleware())
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		path := swagger.GetProxyPath(c)
 		return c.SendString(path)
 	})
@@ -59,7 +59,7 @@ func TestProxyPathMiddleware_WithoutHeader(t *testing.T) {
 func TestGetProxyPath_NilLocals(t *testing.T) {
 	app := fiber.New()
 	// No middleware — Locals will be nil/missing.
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		path := swagger.GetProxyPath(c)
 		return c.SendString(path)
 	})

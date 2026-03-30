@@ -4,8 +4,9 @@ import (
 	"go-api-boilerplate/internal/utility/swagger"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
-	fiberSwagger "github.com/gofiber/swagger"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 // GetDocumentation godoc
@@ -16,7 +17,7 @@ import (
 // @Success 200 {object} map[string]interface{} "Swagger documentation"
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /swagger/doc.json [get]
-func (h *HandlersRegistry) GetSwaggerDocumentation(c *fiber.Ctx) error {
+func (h *HandlersRegistry) GetSwaggerDocumentation(c fiber.Ctx) error {
 	// Get proxy path from context (set by middleware)
 	proxyPath := swagger.GetProxyPath(c)
 
@@ -38,7 +39,7 @@ func (h *HandlersRegistry) GetSwaggerDocumentation(c *fiber.Ctx) error {
 // @Produce html
 // @Success 200 {string} string "Swagger UI HTML"
 // @Router /swagger [get]
-func (h *HandlersRegistry) GetSwaggerUI(c *fiber.Ctx) error {
+func (h *HandlersRegistry) GetSwaggerUI(c fiber.Ctx) error {
 	// Get proxy path from context
 	proxyPath := swagger.GetProxyPath(c)
 
@@ -49,12 +50,12 @@ func (h *HandlersRegistry) GetSwaggerUI(c *fiber.Ctx) error {
 		docURL = proxyPath + "/swagger/doc.json"
 	}
 
-	return fiberSwagger.New(
-		fiberSwagger.Config{
-			URL:          docURL,
-			DeepLinking:  true,
-			DocExpansion: "none",
-			Title:        "API Documentation",
-		},
-	)(c)
+	// httpSwagger.Handler returns a net/http handler. In Fiber v3, the built-in
+	// adaptor middleware bridges net/http handlers into Fiber's handler chain
+	// without requiring manual fasthttp-to-net/http conversion.
+	return adaptor.HTTPHandler(httpSwagger.Handler(
+		httpSwagger.URL(docURL),
+		httpSwagger.DeepLinking(true),
+		httpSwagger.DocExpansion("none"),
+	))(c)
 }
