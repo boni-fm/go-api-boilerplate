@@ -6,8 +6,8 @@ import (
 
 	"go-api-boilerplate/internal/database"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/healthcheck"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/healthcheck"
 )
 
 // readinessTimeout is the maximum time allowed for the DB ping during a
@@ -15,33 +15,40 @@ import (
 // pod is marked unready so the load balancer stops sending it traffic.
 const readinessTimeout = 2 * time.Second
 
-// HealthCheckMiddleware returns Fiber's healthcheck middleware configured with
-// both a liveness and a readiness probe:
+// LivenessHandler returns a Fiber handler for the liveness probe.
+// Register it on the desired path (conventionally /live or /livez):
 //
-//   - GET /live   → 200 OK when the process is running (liveness).
-//   - GET /ready  → 200 OK only when PostgreSQL responds to a Ping within
-//     [readinessTimeout]; 503 Service Unavailable otherwise.
+//	app.Get("/live", middleware.LivenessHandler())
 //
-// In Kubernetes, wire these as:
-//
-//	livenessProbe:  httpGet: { path: /live,  port: 8080 }
-//	readinessProbe: httpGet: { path: /ready, port: 8080 }
-func HealthCheckMiddleware() fiber.Handler {
+// In Fiber v3, healthcheck endpoints are registered as individual routes
+// rather than as a single unified middleware — this gives each probe its own
+// path without requiring the caller to pre-configure endpoint names.
+func LivenessHandler() fiber.Handler {
 	return healthcheck.New(healthcheck.Config{
-		LivenessProbe: func(_ *fiber.Ctx) bool {
+		Probe: func(_ fiber.Ctx) bool {
 			return true
 		},
-		LivenessEndpoint: "/live",
+	})
+}
 
-		ReadinessProbe:    readinessProbe,
-		ReadinessEndpoint: "/ready",
+// ReadinessHandler returns a Fiber handler for the readiness probe.
+// Register it on the desired path (conventionally /ready or /readyz):
+//
+//	app.Get("/ready", middleware.ReadinessHandler())
+//
+// The probe pings PostgreSQL with a [readinessTimeout] deadline. A 503 is
+// returned when the database is unreachable, preventing traffic from being
+// routed to the pod before it can serve requests.
+func ReadinessHandler() fiber.Handler {
+	return healthcheck.New(healthcheck.Config{
+		Probe: readinessProbe,
 	})
 }
 
 // readinessProbe checks that the database is reachable. It creates a
 // short-lived context with a timeout so that a slow or partitioned DB
 // does not block the probe indefinitely.
-func readinessProbe(_ *fiber.Ctx) bool {
+func readinessProbe(_ fiber.Ctx) bool {
 	db := database.GetDatabase()
 	if db == nil {
 		return false

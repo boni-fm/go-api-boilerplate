@@ -5,7 +5,7 @@ import (
 	"go-api-boilerplate/internal/api/models"
 	"go-api-boilerplate/internal/utility/fibererror"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // CreateUser godoc
@@ -19,9 +19,9 @@ import (
 // @Failure 400 {object} fibererror.ResponseError "Invalid request format or missing fields"
 // @Failure 500 {object} fibererror.ResponseError "Internal server error"
 // @Router /api/users [post]
-func (hr *HandlersRegistry) CreateUser(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 	var req models.CreateUserRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusBadRequest,
 			Error:   "Bad Request",
@@ -63,7 +63,7 @@ func (hr *HandlersRegistry) CreateUser(c *fiber.Ctx) error {
 // @Success 200 {object} models.UsersListResponse "Users retrieved successfully"
 // @Failure 500 {object} fibererror.ResponseError "Failed to fetch users"
 // @Router /api/users [get]
-func (hr *HandlersRegistry) GetUsers(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
 	users, err := hr.UserService.GetUsers(c.Context())
 	if err != nil {
 		hr.log_.Errorf("Get users error: %v", err)
@@ -93,11 +93,11 @@ func (hr *HandlersRegistry) GetUsers(c *fiber.Ctx) error {
 // @Failure 400 {object} fibererror.ResponseError "Invalid request format or missing fields"
 // @Failure 500 {object} fibererror.ResponseError "Failed to update password"
 // @Router /api/users/{user_name}/password [put]
-func (hr *HandlersRegistry) UpdateUserPassword(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 	userName := c.Params("user_name")
 
 	var req models.UpdateUserPasswordRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusBadRequest,
 			Error:   "Bad Request",
@@ -139,7 +139,7 @@ func (hr *HandlersRegistry) UpdateUserPassword(c *fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{} "User deleted successfully"
 // @Failure 500 {object} fibererror.ResponseError "Failed to delete user"
 // @Router /api/users/{user_name} [delete]
-func (hr *HandlersRegistry) DeleteUser(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) DeleteUser(c fiber.Ctx) error {
 	userName := c.Params("user_name")
 
 	if err := hr.UserService.DeleteUser(c.Context(), userName); err != nil {

@@ -10,7 +10,7 @@ import (
 
 	"go-api-boilerplate/internal/middleware"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // ── TimeoutMiddleware tests ───────────────────────────────────────────────────
@@ -20,14 +20,14 @@ func TestTimeoutMiddleware_SetsDeadlineOnContext(t *testing.T) {
 	app.Use(middleware.TimeoutMiddleware(5 * time.Second))
 
 	var hasDeadline atomic.Bool
-	app.Get("/", func(c *fiber.Ctx) error {
-		_, ok := c.UserContext().Deadline()
+	app.Get("/", func(c fiber.Ctx) error {
+		_, ok := c.Context().Deadline()
 		hasDeadline.Store(ok)
 		return c.SendStatus(fiber.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestTimeoutMiddleware_SetsDeadlineOnContext(t *testing.T) {
 		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	if !hasDeadline.Load() {
-		t.Error("UserContext should have a deadline after TimeoutMiddleware")
+		t.Error("Context() should have a deadline after TimeoutMiddleware")
 	}
 }
 
@@ -46,8 +46,8 @@ func TestTimeoutMiddleware_ContextCancelledAfterTimeout(t *testing.T) {
 	app.Use(middleware.TimeoutMiddleware(timeout))
 
 	var ctxErr atomic.Value
-	app.Get("/", func(c *fiber.Ctx) error {
-		ctx := c.UserContext()
+	app.Get("/", func(c fiber.Ctx) error {
+		ctx := c.Context()
 		// Wait for the deadline to pass.
 		select {
 		case <-ctx.Done():
@@ -59,7 +59,7 @@ func TestTimeoutMiddleware_ContextCancelledAfterTimeout(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	_, err := app.Test(req, 5000)
+	_, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,14 +79,14 @@ func TestTimeoutMiddleware_NonPositiveDefaultsToSafe(t *testing.T) {
 	app.Use(middleware.TimeoutMiddleware(0))
 
 	var hasDeadline atomic.Bool
-	app.Get("/", func(c *fiber.Ctx) error {
-		_, ok := c.UserContext().Deadline()
+	app.Get("/", func(c fiber.Ctx) error {
+		_, ok := c.Context().Deadline()
 		hasDeadline.Store(ok)
 		return c.SendStatus(fiber.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +94,6 @@ func TestTimeoutMiddleware_NonPositiveDefaultsToSafe(t *testing.T) {
 		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	if !hasDeadline.Load() {
-		t.Error("UserContext should have a deadline even with timeout=0 (should use default)")
+		t.Error("Context() should have a deadline even with timeout=0 (should use default)")
 	}
 }

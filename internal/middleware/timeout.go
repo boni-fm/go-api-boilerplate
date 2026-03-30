@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // defaultRequestTimeout is the maximum time a request handler is allowed to
@@ -16,23 +16,23 @@ import (
 // can override this per-handler by creating their own derived context.
 const defaultRequestTimeout = 30 * time.Second
 
-// TimeoutMiddleware wraps every request's UserContext with a timeout-bounded
+// TimeoutMiddleware wraps every request's context with a timeout-bounded
 // child context. This ensures that database queries and other I/O operations
 // that accept a context.Context will be cancelled automatically if the handler
 // runs for too long.
 //
-// Fiber reuses contexts across requests (fasthttp pool), so we must not store
-// the derived context anywhere — we only set it for the current request cycle
-// via c.SetUserContext.
+// In Fiber v3, c.Context() returns the standard context.Context set via
+// c.SetContext(). Downstream code (services, repositories) should accept
+// and respect this context so deadlines propagate correctly.
 func TimeoutMiddleware(timeout time.Duration) fiber.Handler {
 	if timeout <= 0 {
 		timeout = defaultRequestTimeout
 	}
-	return func(c *fiber.Ctx) error {
-		ctx, cancel := context.WithTimeout(c.UserContext(), timeout)
+	return func(c fiber.Ctx) error {
+		ctx, cancel := context.WithTimeout(c.Context(), timeout)
 		defer cancel()
 
-		c.SetUserContext(ctx)
+		c.SetContext(ctx)
 		return c.Next()
 	}
 }

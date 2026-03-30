@@ -27,14 +27,3 @@ type UserServiceIface interface {
 	// DeleteUser permanently removes the user by username.
 	DeleteUser(ctx context.Context, userName string) error
 }
-
-// ProfileServiceIface defines the profile-domain operations required by the
-// handler layer. The concrete *services.ProfileService satisfies this
-// interface; a mock implementation can be injected in unit tests.
-type ProfileServiceIface interface {
-	// GetProfile returns the extended profile for the given user.
-	GetProfile(ctx context.Context, userName string) (*models.ProfileResponse, error)
-
-	// UpsertProfile creates or updates the profile for the given user.
-	UpsertProfile(ctx context.Context, userName, displayName, email string) error
-}

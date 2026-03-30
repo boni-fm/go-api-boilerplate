@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go-api-boilerplate/internal/api/handlers"
 	"go-api-boilerplate/internal/api/models"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // ----- mock service -----
@@ -76,7 +77,7 @@ func TestCreateUser_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +104,7 @@ func TestCreateUser_MissingFields(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/users", jsonBody(t, tc.body))
 			req.Header.Set("Content-Type", "application/json")
 
-			resp, err := app.Test(req, 5000)
+			resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,7 +122,7 @@ func TestCreateUser_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewBufferString("{not-json"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func TestCreateUser_ServiceError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +156,7 @@ func TestGetUsers_Success(t *testing.T) {
 	app := newTestRouter(t, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +183,7 @@ func TestGetUsers_ServiceError(t *testing.T) {
 	app := newTestRouter(t, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +202,7 @@ func TestUpdateUserPassword_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +219,7 @@ func TestUpdateUserPassword_MissingNewPassword(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +236,7 @@ func TestUpdateUserPassword_ServiceError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +252,7 @@ func TestDeleteUser_Success(t *testing.T) {
 	app := newTestRouter(t, svc)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +266,7 @@ func TestDeleteUser_ServiceError(t *testing.T) {
 	app := newTestRouter(t, svc)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +286,7 @@ func TestErrorResponses_UseStandardShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req, 5000)
+	resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	rawBody, _ := io.ReadAll(resp.Body)
 
 	var m map[string]interface{}

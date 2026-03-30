@@ -1,5 +1,5 @@
 # ── Stage 1: Build ───────────────────────────────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install ca-certs and timezone data so the final image can validate TLS
 # certificates and use the Asia/Jakarta timezone correctly.

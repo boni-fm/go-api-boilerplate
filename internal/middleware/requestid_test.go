@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go-api-boilerplate/internal/middleware"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 )
 
 // ── RequestIDMiddleware tests ─────────────────────────────────────────────────
@@ -16,12 +18,12 @@ import (
 func TestRequestIDMiddleware_GeneratesUUID(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestIDMiddleware())
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,13 +43,13 @@ func TestRequestIDMiddleware_PropagatesIncomingHeader(t *testing.T) {
 
 	app := fiber.New()
 	app.Use(middleware.RequestIDMiddleware())
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", incoming)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,19 +60,21 @@ func TestRequestIDMiddleware_PropagatesIncomingHeader(t *testing.T) {
 	}
 }
 
-func TestRequestIDMiddleware_SetsLocals(t *testing.T) {
+func TestRequestIDMiddleware_SetsContext(t *testing.T) {
+	// In Fiber v3, the request ID is stored using a typed unexported key inside
+	// the requestid middleware. Retrieve it with requestid.FromContext(c).
 	app := fiber.New()
 	app.Use(middleware.RequestIDMiddleware())
-	app.Get("/", func(c *fiber.Ctx) error {
-		rid, ok := c.Locals(middleware.LocalsRequestID).(string)
-		if !ok || rid == "" {
+	app.Get("/", func(c fiber.Ctx) error {
+		rid := requestid.FromContext(c)
+		if rid == "" {
 			return c.SendStatus(fiber.StatusInternalServerError)
 		}
 		return c.SendString(rid)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,21 +84,21 @@ func TestRequestIDMiddleware_SetsLocals(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	if len(body) == 0 {
-		t.Error("body is empty; handler should have returned the request ID from locals")
+		t.Error("body is empty; handler should have returned the request ID from context")
 	}
 }
 
 func TestRequestIDMiddleware_UniquePerRequest(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestIDMiddleware())
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
 	ids := make(map[string]bool)
 	for i := 0; i < 10; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		resp, err := app.Test(req, 5000)
+		resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}

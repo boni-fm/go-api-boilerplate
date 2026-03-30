@@ -5,8 +5,8 @@ import (
 	"runtime/debug"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 // RecoverMiddleware returns Fiber's battle-tested built-in recovery middleware.
@@ -23,7 +23,7 @@ import (
 func RecoverMiddleware(log *log.Logger) fiber.Handler {
 	return recover.New(recover.Config{
 		EnableStackTrace: true,
-		StackTraceHandler: func(c *fiber.Ctx, e interface{}) {
+		StackTraceHandler: func(c fiber.Ctx, e interface{}) {
 			log.Errorf("Recovered from panic: %v\n%s", e, debug.Stack())
 		},
 	})
