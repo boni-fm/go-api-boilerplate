@@ -5,6 +5,7 @@ import (
 	"go-api-boilerplate/internal/middleware"
 	"go-api-boilerplate/internal/utility/swagger"
 	"go-api-boilerplate/internal/worker"
+	"strings"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"github.com/gofiber/fiber/v3"
@@ -33,13 +34,25 @@ func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool) {
 	app.Get("/", func(c fiber.Ctx) error {
 		proxyPath := c.Get("X-Forwarded-Prefix", "")
 		if proxyPath != "" {
-			return c.Redirect().Status(fiber.StatusTemporaryRedirect).To(proxyPath + "/swagger")
+			proxyPath = strings.TrimSuffix(proxyPath, "/")
+			return c.Redirect().Status(fiber.StatusTemporaryRedirect).To(proxyPath + "/swagger/index.html")
 		}
-		return c.Redirect().Status(fiber.StatusTemporaryRedirect).To("/swagger")
+		return c.Redirect().Status(fiber.StatusTemporaryRedirect).To("/swagger/index.html")
 	})
 
 	app.Get("/ping", handlers.PingPongHandler)
 	app.Get("/swagger/doc.json", handlers.GetSwaggerDocumentation)
+	// Fiber v3 does not match "/swagger" (no trailing slash) against the
+	// "/swagger/" or "/swagger/*" routes. Add an explicit redirect so that
+	// browsers reaching /swagger are sent to the Swagger UI index page.
+	app.Get("/swagger", func(c fiber.Ctx) error {
+		proxyPath := c.Get("X-Forwarded-Prefix", "")
+		if proxyPath != "" {
+			proxyPath = strings.TrimSuffix(proxyPath, "/")
+			return c.Redirect().Status(fiber.StatusMovedPermanently).To(proxyPath + "/swagger/index.html")
+		}
+		return c.Redirect().Status(fiber.StatusMovedPermanently).To("/swagger/index.html")
+	})
 	app.Get("/swagger/", handlers.GetSwaggerUI)
 	app.Get("/swagger/*", handlers.GetSwaggerUI)
 
