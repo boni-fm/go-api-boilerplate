@@ -43,7 +43,17 @@ Maret 27, 2026
 [+] Add appsettings.ini with example configuration
 [+] Document all API endpoints, project structure, and middleware
 
-Maret 29, 2026  [Boilerplate 2.0]
+Maret 30, 2026  [Profile Domain]
+[+] Add Profile domain as worked example (ProfileModels, ProfileRepo, ProfileService,
+     ProfileHandler) following the developer-handbook step-by-step guide
+[+] Add GET /api/users/:user_name/profile — returns extended profile (display_name, email)
+     with async worker-pool audit event
+[+] Add PUT /api/users/:user_name/profile — create or update a user profile (upsert)
+[+] Add ProfileServiceIface to handlers/interfaces.go for clean DI and testability
+[=] Update HandlersRegistry (BaseHandler.go) to wire ProfileService
+[=] Update testing_helpers.go to document ProfileService injection pattern
+[+] Add profile handler tests (profile_test.go, 8 tests)
+[+] Add profile service unit tests (profile_test.go, 5 tests)
 [+] Add RequestIDMiddleware — UUIDv4 X-Request-ID header for log correlation
 [+] Add TimeoutMiddleware — 30s context deadline on every request
 [+] Add /ready readiness probe that pings PostgreSQL (2s timeout)

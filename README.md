@@ -210,6 +210,30 @@ go-api-boilerplate/
 { "success": true, "message": "User deleted" }
 ```
 
+### User Profile
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/users/:user_name/profile` | Get extended profile (display name, email) |
+| `PUT` | `/api/users/:user_name/profile` | Create or update a user profile |
+
+#### Get Profile – `GET /api/users/:user_name/profile`
+
+```json
+// Response 200
+{ "success": true, "data": { "user_name": "alice", "display_name": "Alice Smith", "email": "alice@example.com" } }
+```
+
+#### Upsert Profile – `PUT /api/users/:user_name/profile`
+
+```json
+// Request
+{ "display_name": "Alice Smith", "email": "alice@example.com" }
+
+// Response 200
+{ "success": true, "message": "Profile updated" }
+```
+
 ---
 
 ## Adding a New Feature

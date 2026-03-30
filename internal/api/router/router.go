@@ -39,4 +39,8 @@ func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool) {
 	app.Get("/api/users", handlers.GetUsers)
 	app.Put("/api/users/:user_name/password", handlers.UpdateUserPassword)
 	app.Delete("/api/users/:user_name", handlers.DeleteUser)
+
+	// > profile routes (example)
+	app.Get("/api/users/:user_name/profile", handlers.GetProfile)
+	app.Put("/api/users/:user_name/profile", handlers.UpsertProfile)
 }
