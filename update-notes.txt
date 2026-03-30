@@ -84,3 +84,5 @@ Maret 30, 2026  [Fiber v3 Migration]
 [=] Update all tests: app.Test(req, 5000) → app.Test(req, fiber.TestConfig{Timeout: 5s})
 [=] Update middleware registration order: RequestID → Logger → Recover → Timeout →
      Favicon → RateLimiter (HealthCheck moved to route level)
+[+] Add Immutable: true to fiber.Config — prevents zero-allocation data corruption
+     when context values (c.Params, c.Query, c.Get) are captured by worker pool tasks

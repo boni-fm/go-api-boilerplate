@@ -64,6 +64,13 @@ func NewServer(cfg config.Config, fiberCfg *FiberConfig) *Server {
 		CaseSensitive: fiberCfg.CaseSensitive,
 		ErrorHandler:  fiberCfg.ErrorHandler,
 
+		// Immutable must be true because handlers may pass context-derived
+		// values (c.Params(), c.Query(), c.Get()) into the worker pool for
+		// background processing. Without this flag, those values are backed
+		// by mutable fasthttp byte slices that are recycled after the handler
+		// returns, causing silent data corruption in background tasks.
+		Immutable: true,
+
 		// Setup timeouts and body limits
 		ReadTimeout:  fiberCfg.ReadTimeout,
 		WriteTimeout: fiberCfg.WriteTimeout,
