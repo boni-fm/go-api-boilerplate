@@ -250,11 +250,49 @@ System Go : go1.23.0
 Required  : go1.25.8
 ⚠ Installing go1.25.8 via golang.org/dl...
 ✓ Using go1.25.8 for this setup run.
-  Tip: add $(go env GOPATH)/bin to PATH and run: go1.25.8 run main.go
+
+  How to use go1.25.8 in future terminal sessions:
+  ┌─────────────────────────────────────────────────────────────┐
+  │ Option A — Add GOPATH/bin to PATH (recommended):            │
+  │   export PATH="$(go env GOPATH)/bin:$PATH"                  │
+  │   go1.25.8 run main.go                                      │
+  │                                                             │
+  │ Option B — Use the full path:                               │
+  │   /home/user/go/bin/go1.25.8 run main.go                   │
+  │                                                             │
+  │ NOTE: This does NOT change your system Go. Other projects   │
+  │ using a different Go version are not affected.              │
+  └─────────────────────────────────────────────────────────────┘
 ```
 
 The wrapper binary (`go1.25.8`) lives in `$(go env GOPATH)/bin/` and is
 completely independent of your system Go installation.
+
+### Switching Go versions
+
+| Method | Platform | Scope | Command |
+|--------|----------|-------|---------|
+| `golang.org/dl` wrapper | All | Project-local | `go1.25.8 run main.go` |
+| `goswitch.bat` | Windows | Current terminal only | `goswitch 1.25.8` |
+
+**`golang.org/dl` (used by `setup.sh` / `setup.bat`)**
+
+```bash
+go install golang.org/dl/go1.25.8@latest   # install wrapper (one-time)
+go1.25.8 download                           # download toolchain (one-time)
+go1.25.8 run main.go                        # use it
+```
+
+**`goswitch.bat` (Windows only — session-only, no permanent env changes)**
+
+```bat
+goswitch 1.25.8     :: switch for this terminal only
+go run main.go      :: uses the switched version
+```
+
+> `goswitch` does **not** use `setx`. Other terminals and projects are not affected.
+
+For full details, see [`documentation/setting-up-goenv.md`](documentation/setting-up-goenv.md).
 
 ---
 
