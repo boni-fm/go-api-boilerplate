@@ -1,4 +1,4 @@
-# Boilerplate 2.0 — Developer Handbook
+# Boilerplate 3.0 — Developer Handbook
 
 **Audience:** Software engineers in the ITSD3 / SD3 department who clone this
 template to build a new microservice.
@@ -7,37 +7,43 @@ template to build a new microservice.
 
 ## Table of Contents
 
-1. [Boilerplate 2.0 Audit Results](#audit-results)
+1. [Boilerplate Audit Results](#audit-results)
 2. [Architecture Overview](#architecture-overview)
-3. [Project Structure](#project-structure)
-4. [Adding a New Domain Endpoint — Step-by-Step](#adding-a-new-domain-endpoint)
-5. [Using the Background Worker Pool](#using-the-background-worker-pool)
-6. [Production Checklist](#production-checklist)
+3. [Multi-DC / Multi-Tenant Routing](#multi-dc--multi-tenant-routing)
+4. [Timezone Configuration](#timezone-configuration)
+5. [Developer Setup & goswitch](#developer-setup--goswitch)
+6. [Project Structure](#project-structure)
+7. [Adding a New Domain Endpoint — Step-by-Step](#adding-a-new-domain-endpoint)
+8. [Using the Background Worker Pool](#using-the-background-worker-pool)
+9. [Production Checklist](#production-checklist)
 
 ---
 
-## 1. Boilerplate 2.0 Audit Results
+## 1. Boilerplate Audit Results
 
-### 1.1 Vulnerability Log (Boilerplate 1.0 issues — all fixed)
+### 1.1 Vulnerability Log (all fixed)
 
 | # | Category | Finding | Fix applied |
 |---|---|---|---|
-| 1 | **Critical bug** | `GlobalErrorHandler` had no `default` case — any `*fiber.Error` not in the switch (401, 403, 405, 408, 413, 429 …) was silently re-emitted as HTTP 500, masking every client-side error as a server crash in production dashboards | Added `default` case using `net/http.StatusText(e.Code)` |
-| 2 | **Envelope inconsistency** | `BadRequestError` and `GatewayTimeoutError` used ad-hoc `fiber.Map{}` literals instead of the typed `ResponseError` struct — any field rename diverged silently | Converted both helpers to `ResponseError` |
-| 3 | **Fragile recover middleware** | Custom `defer`-based recover: (a) silently discarded write errors (`_ = c.JSON(…)`), (b) bypassed `GlobalErrorHandler`, (c) had no stack-trace capture | Replaced with Fiber's built-in `middleware/recover` + `runtime/debug.Stack()` logging |
-| 4 | **Unbounded goroutine growth** | No mechanism to cap background goroutines — a sudden traffic spike creating background tasks would grow goroutine count without bound | Added bounded `worker.Pool` (fixed workers + buffered channel with load-shedding) |
-| 5 | **Dead code** | `UpdateUserPassword` checked `userName == ""` — a path Fiber's `:user_name` route pattern can never produce | Removed |
-| 6 | **No request tracing** | No correlation ID on requests — impossible to trace a single request through logs across middleware, handler, and service layers | Added `RequestIDMiddleware` (UUIDv4, sets `X-Request-ID` header + context locals) |
-| 7 | **No context timeout propagation** | DB queries used raw context without deadlines — a slow query could block a handler goroutine indefinitely | Added `TimeoutMiddleware` (30 s default deadline on every request's `UserContext`) |
-| 8 | **No readiness probe** | Only a liveness probe (`/live`) — Kubernetes/load-balancer had no way to detect a service that was up but couldn't reach the database | Added `/ready` probe that pings PostgreSQL with a 2 s timeout |
+| 1 | **Critical bug** | `GlobalErrorHandler` had no `default` case — any `*fiber.Error` not in the switch (401, 403, 405 …) was silently re-emitted as HTTP 500 | Added `default` case using `net/http.StatusText(e.Code)` |
+| 2 | **Envelope inconsistency** | `BadRequestError` and `GatewayTimeoutError` used ad-hoc `fiber.Map{}` instead of typed `ResponseError` | Converted both helpers to `ResponseError` |
+| 3 | **Fragile recover middleware** | Custom defer-based recover: silently discarded write errors, bypassed `GlobalErrorHandler`, no stack-trace capture | Replaced with Fiber built-in recover + `runtime/debug.Stack()` logging |
+| 4 | **Unbounded goroutine growth** | No cap on background goroutines | Added bounded `worker.Pool` (fixed workers + buffered channel, load-shedding) |
+| 5 | **Dead code** | `UpdateUserPassword` checked `userName == ""` — unreachable via Fiber route | Removed |
+| 6 | **No request tracing** | No correlation ID | Added `RequestIDMiddleware` (UUIDv4, `X-Request-ID`) |
+| 7 | **No context timeout propagation** | DB queries had no deadline | Added `TimeoutMiddleware` (30 s per request) |
+| 8 | **No readiness probe** | Only `/live` | Added `/ready` that pings PostgreSQL with a 2 s timeout |
+| 9 | **Global DB variable** | `database.Db` package-level var caused race conditions | Replaced with `database.Registry` + per-request DI via context |
+| 10 | **Service-level interfaces** | `UserServiceIface` in handler layer — unnecessary abstraction | Removed; handlers use `*services.UserService`; mocking at repository level |
+| 11 | **404 static-file recursion** | `NotFoundError` propagated `SendFile` error — could recurse into `GlobalErrorHandler` | Added JSON fallback when `SendFile` fails |
 
 ### 1.2 Rating
 
 | Dimension | Score | Justification |
 |---|---|---|
-| **Security** | 7 / 10 | Error envelopes are now consistent and leak no internal details. Passwords are bcrypt-hashed at the service layer. Rate limiting is in place. Room to grow: add JWT middleware, request-body signing, TLS termination config. |
-| **Scalability** | 7 / 10 | Fiber/fasthttp provides excellent per-core throughput. The new bounded worker pool prevents unbounded goroutine growth under load. Room to grow: connection-pool tuning (`pgx` pool size), read-replicas, horizontal sharding. |
-| **Maintainability** | 8 / 10 | Clean layered architecture (handler → service → repository) with interface-based DI, making every layer unit-testable in isolation. Godocs on all exported symbols. Room to grow: adopt structured logging (zerolog/zap), add OpenTelemetry traces. |
+| **Security** | 8 / 10 | Consistent error envelopes, bcrypt passwords, rate limiting, Swagger disabled in production. Room to grow: JWT, TLS termination. |
+| **Scalability** | 8 / 10 | Multi-DC routing, bounded worker pool, context-deadline propagation. Room to grow: pgx pool tuning, read-replicas. |
+| **Maintainability** | 9 / 10 | Concrete-type DI, clean layered architecture, godocs on all exported symbols. |
 
 ---
 
@@ -45,131 +51,228 @@ template to build a new microservice.
 
 ```
 HTTP Request
-     │
-     ▼
-┌──────────────────────────────────────────────────┐
-│  Fiber Middleware Stack                           │
-│  (RequestID → Logger → Recover → Timeout         │
-│   → HealthCheck → Favicon → RateLimiter)          │
-└────────────────┬─────────────────────────────────┘
-                 │
-                 ▼
-┌──────────────────────────────────────────────────┐
-│  Handler Layer  (internal/api/handlers/)         │
-│  • Validates HTTP request / marshals response    │
-│  • Delegates to Service layer                    │
-│  • May submit fire-and-forget tasks to Pool      │
-└──────┬───────────────────────────┬───────────────┘
-       │                           │
-       ▼                           ▼
-┌────────────┐            ┌─────────────────┐
-│  Service   │            │  Worker Pool    │
-│  Layer     │            │  (background    │
-│  (business │            │   tasks)        │
-│   logic,   │            └─────────────────┘
-│   bcrypt)  │
-└──────┬─────┘
-       │
-       ▼
-┌──────────────────────────────────────────────────┐
-│  Repository Layer (internal/api/repository/)     │
-│  • Implements Repository interfaces              │
-│  • Raw SQL via pgx/scany — no ORM                │
-└──────────────────────┬───────────────────────────┘
-                       │
-                       ▼
-                   PostgreSQL
+     |
+     v
++--------------------------------------------------------------+
+|  Fiber Middleware Stack                                       |
+|  RequestID -> Logger -> Recover -> MultiTenant -> Timeout    |
+|  -> Favicon -> RateLimiter                                   |
++-----------------------------+--------------------------------+
+                              |  (DB injected into context here)
+                              v
++--------------------------------------------------------------+
+|  Handler Layer  (internal/api/handlers/)                     |
+|  * Validates HTTP request / marshals response                |
+|  * Delegates to Service layer                                |
+|  * May submit fire-and-forget tasks to Pool                  |
++------+---------------------------------------------+--------+
+       |                                             |
+       v                                             v
++--------------------+                   +---------------------+
+|  Service Layer     |                   |  Worker Pool        |
+|  (business logic,  |                   |  (background tasks) |
+|   bcrypt)          |                   +---------------------+
++------+-------------+
+       |
+       v
++--------------------------------------------------------------+
+|  Repository Layer (internal/api/repository/)                 |
+|  * Calls database.DBFromContext(ctx) for the tenant DB       |
+|  * Raw SQL via pgx/scany -- no ORM                           |
++---------------------------+----------------------------------+
+                            |
+            +---------------+-----------------+
+            v                                 v
+     PostgreSQL (DC g009sim)         PostgreSQL (DC g010sim)
 ```
 
 **Key design principles:**
 
-- **Accept interfaces, return structs.** Every service depends on a repository
-  *interface*, not a concrete struct. Swap in a mock for tests — zero real DB
-  required.
-- **Errors wrap, never swallow.** Always use `fmt.Errorf("context: %w", err)`
-  so callers can use `errors.Is`/`errors.As`.
-- **Handlers own only HTTP concerns.** Business rules live in the Service layer
-  exclusively.
+- **Concrete types over unnecessary interfaces.** Handlers depend directly on
+  `*services.UserService`. Mocking is done at the repository level
+  (`repository.UserRepository` interface) where it matters for unit tests.
+- **Errors wrap, never swallow.** Always use `fmt.Errorf("context: %w", err)`.
+- **Handlers own only HTTP concerns.** Business rules live in the Service layer.
+- **DB is request-scoped.** `MultiTenantMiddleware` injects the correct
+  `*postgres.Database` into every request's `context.Context`.
+  Repositories retrieve it with `database.DBFromContext(ctx)`.
 
 ---
 
-## 3. Project Structure
+## 3. Multi-DC / Multi-Tenant Routing
+
+### How it works
+
+`MultiTenantMiddleware` runs on every request (position 4 in the stack). It
+resolves the tenant key and looks it up in `database.Registry`. The matching
+`*postgres.Database` is stored in the request context via `database.WithDB`.
+All repository calls then call `database.DBFromContext(ctx)` — no globals.
+
+### Tenant key resolution (highest -> lowest priority)
+
+| Priority | Source | Notes |
+|----------|--------|-------|
+| 1 | `?kunci=<key>` query parameter | Useful for ad-hoc debugging or SDK calls |
+| 2 | `X-Kunci: <key>` request header | Standard service-to-service usage |
+| 3 | `X-Forwarded-Prefix` nginx header | First path segment is the key: `/g009sim/api` -> `g009sim` |
+| 4 | Default (first `Kunci` in appsettings.ini) | Used when no explicit key is found |
+
+### Nginx configuration example
+
+```nginx
+location /g009sim/ {
+    proxy_pass         http://go-api:8080/;
+    proxy_set_header   Host               $host;
+    proxy_set_header   X-Real-IP          $remote_addr;
+    proxy_set_header   X-Forwarded-Prefix /g009sim;
+}
+```
+
+### appsettings.ini for multi-DC
+
+```ini
+[CONFIG]
+Kunci = g009sim,g010sim   # connects to both DCs at startup
+```
+
+The first key (`g009sim`) is the default fallback.
+
+---
+
+## 4. Timezone Configuration
+
+### Resolution order (highest -> lowest)
+
+| Priority | Source | Recommendation |
+|----------|--------|---------------|
+| 1 | `TZ` environment variable | **Use in production / Docker / K8s** |
+| 2 | `Timezone` key in `appsettings.ini` | Use for local development convenience |
+| 3 | UTC | Safe default |
+
+### Development (`appsettings.ini`)
+
+```ini
+[CONFIG]
+Timezone = Asia/Jakarta
+```
+
+### Production (Docker / K8s)
+
+```yaml
+# docker-compose
+environment:
+  - TZ=Asia/Jakarta
+
+# Kubernetes Pod spec
+env:
+  - name: TZ
+    value: Asia/Jakarta
+```
+
+---
+
+## 5. Developer Setup & goswitch
+
+Run `./setup.sh` (Linux/macOS) or `setup.bat` (Windows) once after cloning.
+
+### What the scripts do
+
+1. **Go version check (goswitch)** — reads the required version from `go.mod`.
+   If your system Go differs, it installs the exact version via
+   `golang.org/dl/go<version>` **without touching your system Go**.
+2. **Module download & tidy** — `go mod download && go mod tidy`.
+3. **swag CLI** — installs the Swagger code-generator if not already present.
+4. **Doc generation** — `swag init -g main.go -o docs`.
+5. **Build** — `go build ./...` to confirm the project compiles cleanly.
+6. **Tests** — `go test ./...`.
+
+### goswitch — under the hood
+
+```
+System Go : go1.23.0
+Required  : go1.25.8
+WARNING Version mismatch. Installing go1.25.8 via golang.org/dl...
+        (Your system go1.23.0 will NOT be modified.)
+OK Using go1.25.8 for this setup run.
+   Tip: add $(go env GOPATH)/bin to PATH and run: go1.25.8 run main.go
+```
+
+The versioned binary (`go1.25.8` / `go1.25.8.exe`) lives in
+`$(go env GOPATH)/bin/` and is completely independent of the system Go. You
+can have multiple project-local Go versions on the same machine without any
+conflict.
+
+---
+
+## 6. Project Structure
 
 ```
 .
-├── cmd/                        # (future) additional entry points (CLI, migration runner)
-├── config/
-│   ├── initialize.go           # Config struct + LoadConfigIni()
-│   └── initialize_test.go
-├── docs/                       # Auto-generated swagger + this handbook
-│   └── developer-handbook.md
-├── internal/
-│   ├── api/
-│   │   ├── handlers/           # HTTP layer: parse request → call service → write response
-│   │   ├── models/             # Request / response DTOs
-│   │   ├── repository/         # Data-access layer: interfaces + Postgres impls
-│   │   ├── router/             # Route registration
-│   │   └── services/           # Business logic layer
-│   ├── database/               # DB pool initialisation
-│   ├── middleware/             # Fiber middleware registrations
-│   │   ├── initialize.go      # Middleware dependency graph + registration order
-│   │   ├── requestid.go       # X-Request-ID generation (UUIDv4) ← NEW in 2.0
-│   │   ├── timeout.go         # Context deadline propagation (30 s) ← NEW in 2.0
-│   │   ├── health-check.go    # /live + /ready (DB ping) probes ← UPDATED in 2.0
-│   │   ├── recover.go         # Panic recovery with stack traces
-│   │   ├── ratelimiter.go     # 100 req/min per IP
-│   │   ├── logger.go          # HTTP request logging (fiberlogrus)
-│   │   └── favicon.go         # Static favicon serving
-│   ├── server/                 # Fiber app construction + lifecycle
-│   ├── utility/
-│   │   ├── fibererror/         # ResponseError envelope + GlobalErrorHandler
-│   │   └── swagger/            # Swagger doc serving + proxy-path handling
-│   └── worker/                 # Bounded background worker pool ← NEW in 2.0
-│       ├── pool.go
-│       └── pool_test.go
-├── static/public/              # Static files (favicon, 404 page)
-├── appsettings.ini             # Non-secret runtime config
-├── Dockerfile                  # Multi-stage production build ← NEW in 2.0
-├── .dockerignore               # Files excluded from Docker context
-├── go.mod / go.sum
-└── main.go                     # Entry point: wire → start → graceful shutdown
++-- config/
+|   +-- initialize.go           # Config struct + LoadConfigIni()
+|   +-- initialize_test.go
++-- docs/                       # Auto-generated swagger + this handbook
+|   +-- developer-handbook.md
++-- internal/
+|   +-- api/
+|   |   +-- handlers/           # HTTP layer
+|   |   +-- models/             # Request / response DTOs
+|   |   +-- repository/         # Data-access layer: UserRepository interface + Postgres impl
+|   |   +-- router/             # Route registration
+|   |   +-- services/           # Business logic layer
+|   +-- database/               # Registry, context helpers, InitDatabases
+|   |   +-- db.go
+|   +-- middleware/
+|   |   +-- initialize.go       # Middleware dependency graph + registration order
+|   |   +-- multitenant.go      # Multi-DC tenant key resolution
+|   |   +-- requestid.go        # X-Request-ID generation (UUIDv4)
+|   |   +-- timeout.go          # Context deadline propagation (30 s)
+|   |   +-- health-check.go     # /live + /ready (DB ping) probes
+|   |   +-- recover.go          # Panic recovery with stack traces
+|   |   +-- ratelimiter.go      # 100 req/min per IP
+|   |   +-- logger.go           # HTTP request logging
+|   |   +-- favicon.go          # Static favicon serving
+|   +-- server/                 # Fiber app construction + lifecycle
+|   +-- utility/
+|   |   +-- fibererror/         # ResponseError envelope + GlobalErrorHandler
+|   |   +-- swagger/            # Swagger doc serving + proxy-path handling
+|   +-- worker/                 # Bounded background worker pool
++-- build/
+|   +-- build.sh                # Cross-platform build (Linux/macOS)
+|   +-- build.bat               # Cross-platform build (Windows)
++-- static/public/              # Static files (favicon, 404 page)
++-- appsettings.ini             # Non-secret runtime config
++-- setup.sh / setup.bat        # Developer init scripts (goswitch + tool install)
++-- Dockerfile                  # Multi-stage production build
++-- go.mod / go.sum
++-- main.go                     # Entry point: wire -> start -> graceful shutdown
 ```
 
 ---
 
-## 4. Adding a New Domain Endpoint
+## 7. Adding a New Domain Endpoint
 
 ### Worked example: User Profile
 
-Suppose you need a `GET /api/users/:user_name/profile` endpoint that returns
-extended profile information stored in a `dc_user_profile_t` table.
-
-You need to create **four files** and modify **one existing file**.
+Suppose you need a `GET /api/users/:user_name/profile` endpoint.
 
 ---
 
-### 4.1 Model — `internal/api/models/ProfileModels.go`
+### 7.1 Model — `internal/api/models/ProfileModels.go`
 
 ```go
 package models
 
-// ProfileResponse is the response DTO for the User Profile endpoint.
 type ProfileResponse struct {
     UserName    string `json:"user_name"    db:"user_name"`
     DisplayName string `json:"display_name" db:"display_name"`
     Email       string `json:"email"        db:"email"`
 }
-
-// UpdateProfileRequest is the request DTO for updating a user profile.
-type UpdateProfileRequest struct {
-    DisplayName string `json:"display_name" example:"Alice Smith"`
-    Email       string `json:"email"        example:"alice@example.com"`
-}
 ```
 
 ---
 
-### 4.2 Repository interface + implementation — `internal/api/repository/ProfileRepo.go`
+### 7.2 Repository — `internal/api/repository/ProfileRepo.go`
 
 ```go
 package repository
@@ -182,13 +285,10 @@ import (
     "go-api-boilerplate/internal/database"
 )
 
-// ProfileRepository defines the persistence contract for user profiles.
 type ProfileRepository interface {
     GetProfile(ctx context.Context, userName string) (*models.ProfileResponse, error)
-    UpsertProfile(ctx context.Context, userName, displayName, email string) error
 }
 
-// PostgresProfileRepository is the production implementation.
 type PostgresProfileRepository struct{}
 
 func NewPostgresProfileRepository() ProfileRepository {
@@ -198,32 +298,23 @@ func NewPostgresProfileRepository() ProfileRepository {
 func (r *PostgresProfileRepository) GetProfile(
     ctx context.Context, userName string,
 ) (*models.ProfileResponse, error) {
+    db := database.DBFromContext(ctx)
+    if db == nil {
+        return nil, database.ErrNoDB
+    }
     var p models.ProfileResponse
     q := `SELECT user_name, display_name, email
           FROM dc_user_profile_t WHERE user_name = $1`
-    if err := database.Db.SelectOne(ctx, &p, q, userName); err != nil {
+    if err := db.SelectOne(ctx, &p, q, userName); err != nil {
         return nil, fmt.Errorf("GetProfile %q: %w", userName, err)
     }
     return &p, nil
-}
-
-func (r *PostgresProfileRepository) UpsertProfile(
-    ctx context.Context, userName, displayName, email string,
-) error {
-    q := `INSERT INTO dc_user_profile_t (user_name, display_name, email)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (user_name) DO UPDATE
-          SET display_name = $2, email = $3`
-    if _, err := database.Db.Exec(ctx, q, userName, displayName, email); err != nil {
-        return fmt.Errorf("UpsertProfile %q: %w", userName, err)
-    }
-    return nil
 }
 ```
 
 ---
 
-### 4.3 Service — `internal/api/services/ProfileService.go`
+### 7.3 Service — `internal/api/services/ProfileService.go`
 
 ```go
 package services
@@ -238,7 +329,6 @@ import (
     "github.com/boni-fm/go-libsd3/pkg/log"
 )
 
-// ProfileService owns all business rules for user profile operations.
 type ProfileService struct {
     log_ *log.Logger
     repo repository.ProfileRepository
@@ -248,7 +338,6 @@ func NewProfileService(log_ *log.Logger, repo repository.ProfileRepository) *Pro
     return &ProfileService{log_: log_, repo: repo}
 }
 
-// GetProfile returns the profile for the given user.
 func (s *ProfileService) GetProfile(
     ctx context.Context, userName string,
 ) (*models.ProfileResponse, error) {
@@ -258,79 +347,35 @@ func (s *ProfileService) GetProfile(
     }
     return profile, nil
 }
-
-// UpsertProfile creates or updates the profile for the given user.
-func (s *ProfileService) UpsertProfile(
-    ctx context.Context, userName, displayName, email string,
-) error {
-    if userName == "" {
-        return fmt.Errorf("ProfileService.UpsertProfile: userName is required")
-    }
-    return s.repo.UpsertProfile(ctx, userName, displayName, email)
-}
 ```
 
 ---
 
-### 4.4 Handler interface — add to `internal/api/handlers/interfaces.go`
-
-```go
-// ProfileServiceIface defines the profile-domain operations required by the
-// handler layer.
-type ProfileServiceIface interface {
-    GetProfile(ctx context.Context, userName string) (*models.ProfileResponse, error)
-    UpsertProfile(ctx context.Context, userName, displayName, email string) error
-}
-```
-
----
-
-### 4.5 Handler — `internal/api/handlers/ProfileHandler.go`
+### 7.4 Handler — `internal/api/handlers/ProfileHandler.go`
 
 ```go
 package handlers
 
 import (
-    "context"
-
     "go-api-boilerplate/internal/utility/fibererror"
-
-    "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v3"
 )
 
 // GetProfile godoc
 // @Summary      Get user profile
-// @Description  Returns extended profile information for a user
 // @Tags         profile
 // @Produce      json
 // @Param        user_name  path      string  true  "Username"
 // @Success      200        {object}  models.ProfileResponse
-// @Failure      404        {object}  fibererror.ResponseError
 // @Failure      500        {object}  fibererror.ResponseError
 // @Router       /api/users/{user_name}/profile [get]
-func (hr *HandlersRegistry) GetProfile(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) GetProfile(c fiber.Ctx) error {
     userName := c.Params("user_name")
     profile, err := hr.ProfileService.GetProfile(c.Context(), userName)
     if err != nil {
         hr.log_.Errorf("GetProfile error: %v", err)
-        return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-            Code:    fiber.StatusInternalServerError,
-            Error:   "Internal Server Error",
-            Message: "Failed to fetch profile",
-        })
+        return fibererror.InternalServerError(c, "Failed to fetch profile")
     }
-
-    // Optional: dispatch a non-critical "profile viewed" event to the worker
-    // pool so it is recorded asynchronously without blocking the response.
-    if hr.Pool != nil {
-        user := userName
-        if ok := hr.Pool.Submit(func(_ context.Context) {
-            hr.log_.Infof("[audit] profile viewed: %s", user)
-        }); !ok {
-            hr.log_.Warn("worker pool saturated — profile-view audit event dropped")
-        }
-    }
-
     return c.Status(fiber.StatusOK).JSON(fiber.Map{
         "success": true,
         "data":    profile,
@@ -340,27 +385,25 @@ func (hr *HandlersRegistry) GetProfile(c *fiber.Ctx) error {
 
 ---
 
-### 4.6 Add ProfileService to HandlersRegistry — update `BaseHandler.go`
-
-Add the new service field and wire it in `NewHandlersRegistry`:
+### 7.5 Wire into HandlersRegistry — `BaseHandler.go`
 
 ```go
 type HandlersRegistry struct {
     log_           *log.Logger
     SwaggerDoc     *swagger.DocumentModifier
-    UserService    UserServiceIface
-    ProfileService ProfileServiceIface   // ← add this
+    UserService    *services.UserService
+    ProfileService *services.ProfileService   // add
     Pool           *worker.Pool
 }
 
 func NewHandlersRegistry(log_ *log.Logger, pool *worker.Pool) *HandlersRegistry {
     userRepo    := repository.NewPostgresUserRepository()
-    profileRepo := repository.NewPostgresProfileRepository()   // ← add this
+    profileRepo := repository.NewPostgresProfileRepository()
     return &HandlersRegistry{
         log_:           log_,
         SwaggerDoc:     swagger.NewDocumentModifier(),
         UserService:    services.NewUserService(log_, userRepo),
-        ProfileService: services.NewProfileService(log_, profileRepo),  // ← add this
+        ProfileService: services.NewProfileService(log_, profileRepo),
         Pool:           pool,
     }
 }
@@ -368,7 +411,7 @@ func NewHandlersRegistry(log_ *log.Logger, pool *worker.Pool) *HandlersRegistry 
 
 ---
 
-### 4.7 Register the route — update `internal/api/router/router.go`
+### 7.6 Register route — `router.go`
 
 ```go
 app.Get("/api/users/:user_name/profile", handlers.GetProfile)
@@ -376,7 +419,7 @@ app.Get("/api/users/:user_name/profile", handlers.GetProfile)
 
 ---
 
-### 4.8 Write tests — `internal/api/handlers/profile_test.go`
+### 7.7 Write tests — `profile_test.go`
 
 ```go
 package handlers_test
@@ -386,45 +429,42 @@ import (
     "net/http"
     "net/http/httptest"
     "testing"
+    "time"
 
-    "go-api-boilerplate/internal/api/handlers"
     "go-api-boilerplate/internal/api/models"
+    "go-api-boilerplate/internal/api/repository"
+    "go-api-boilerplate/internal/api/services"
+    "go-api-boilerplate/internal/api/handlers"
 
     "github.com/boni-fm/go-libsd3/pkg/log"
-    "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v3"
 )
 
-type mockProfileSvc struct {
-    profile  *models.ProfileResponse
-    getErr   error
-    upsertErr error
+type mockProfileRepo struct {
+    profile *models.ProfileResponse
+    err     error
 }
 
-func (m *mockProfileSvc) GetProfile(_ context.Context, _ string) (*models.ProfileResponse, error) {
-    return m.profile, m.getErr
+func (m *mockProfileRepo) GetProfile(_ context.Context, _ string) (*models.ProfileResponse, error) {
+    return m.profile, m.err
 }
 
-func (m *mockProfileSvc) UpsertProfile(_ context.Context, _, _, _ string) error {
-    return m.upsertErr
-}
-
-var _ handlers.ProfileServiceIface = (*mockProfileSvc)(nil)
+var _ repository.ProfileRepository = (*mockProfileRepo)(nil)
 
 func TestGetProfile_Success(t *testing.T) {
     l := log.NewLoggerWithFilename("test")
-    svc := &mockProfileSvc{
-        profile: &models.ProfileResponse{
-            UserName: "alice", DisplayName: "Alice Smith", Email: "alice@example.com",
-        },
+    repo := &mockProfileRepo{
+        profile: &models.ProfileResponse{UserName: "alice"},
     }
+    svc := services.NewProfileService(l, repo)
     hr := handlers.NewHandlersRegistryForTest(l, nil)
-    hr.ProfileService = svc   // inject mock
+    hr.ProfileService = svc
 
     app := fiber.New()
     app.Get("/api/users/:user_name/profile", hr.GetProfile)
 
     req := httptest.NewRequest(http.MethodGet, "/api/users/alice/profile", nil)
-    resp, err := app.Test(req, 5000)
+    resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
     if err != nil {
         t.Fatal(err)
     }
@@ -436,15 +476,12 @@ func TestGetProfile_Success(t *testing.T) {
 
 ---
 
-## 5. Using the Background Worker Pool
+## 8. Using the Background Worker Pool
 
 The worker pool (`internal/worker.Pool`) is injected into every `HandlersRegistry`
 at startup. Handlers access it via `hr.Pool`.
 
 ### When to use it
-
-Use the pool for **non-critical side-effects** that should not block the HTTP
-response:
 
 - Audit logging to a secondary store
 - Publishing events to a message queue
@@ -454,10 +491,9 @@ response:
 ### Pattern
 
 ```go
-func (hr *HandlersRegistry) CreateOrder(c *fiber.Ctx) error {
+func (hr *HandlersRegistry) CreateOrder(c fiber.Ctx) error {
     // ... validate, call service, write DB record ...
 
-    // Fire-and-forget: record audit event without delaying the 201 response.
     if hr.Pool != nil {
         orderID := order.ID
         ok := hr.Pool.Submit(func(ctx context.Context) {
@@ -466,8 +502,7 @@ func (hr *HandlersRegistry) CreateOrder(c *fiber.Ctx) error {
             }
         })
         if !ok {
-            // Pool is saturated — log the drop so operators can alert on it.
-            hr.log_.Warnf("worker pool saturated — audit event for order %s dropped", orderID)
+            hr.log_.Warnf("worker pool saturated -- audit event for order %s dropped", orderID)
         }
     }
 
@@ -475,43 +510,26 @@ func (hr *HandlersRegistry) CreateOrder(c *fiber.Ctx) error {
 }
 ```
 
-### Capacity tuning (in `internal/server/server.go`)
+### Capacity tuning
 
 | Constant | Default | Guidance |
 |---|---|---|
-| `defaultWorkerCount` | 4 | Set to ≈ 2× the number of background task types |
-| `defaultWorkerCapacity` | 128 | Set to (peak task/sec) × (max acceptable latency in seconds) |
-
-Monitor `pool.Stats()` in your health/metrics endpoint:
-
-```go
-processed, dropped := srv.Pool.Stats()
-// Expose as Prometheus gauges or include in /health response.
-```
-
-A non-zero `dropped` counter under steady load means the pool is under-provisioned.
+| `defaultWorkerCount` | 4 | ~2x the number of background task types |
+| `defaultWorkerCapacity` | 128 | (peak task/sec) x (max acceptable latency in seconds) |
 
 ---
 
-## 6. Production Checklist
+## 9. Production Checklist
 
-Before deploying a service built from this boilerplate:
-
-- [ ] **Secrets** — `Kunci` and DB credentials are injected via environment variables
-  (e.g. `APP_CONFIG_KUNCI`), **not** stored in `appsettings.ini`.
-- [ ] **TLS** — terminate TLS at the load balancer or configure Fiber's
-  `app.ListenMutualTLS` / `app.ListenTLS`.
-- [ ] **Rate limits** — adjust `RateLimiter` defaults in `middleware/ratelimiter.go`
-  for your service's expected peak RPS.
-- [ ] **DB pool size** — tune `pgx` pool `MinConns` / `MaxConns` to match your
-  Postgres server's `max_connections` divided by replica count.
-- [ ] **Worker pool size** — adjust `defaultWorkerCount` and `defaultWorkerCapacity`
-  based on load testing results.
-- [ ] **Graceful shutdown** — verify `ShutdownWithTimeout` + `pool.Stop()` are
-  wired correctly (see `main.go`) so no in-flight work is abandoned on `SIGTERM`.
-- [ ] **Logging** — switch to structured JSON logging (zerolog or zap) for
-  production deployments so log-aggregation pipelines (Elastic, Loki) can index
-  fields.
-- [ ] **Health probe** — wire `/live` into your Kubernetes `livenessProbe` and add
-  a `/ready` endpoint that checks DB connectivity before marking the pod ready.
-- [ ] **Tests** — run `go test -race ./...` before every merge to main.
+- [ ] **Secrets** -- DB credentials injected via env vars, **not** in `appsettings.ini`.
+- [ ] **Swagger disabled** -- Set `IsDevelopment = false`.
+- [ ] **Timezone** -- Set `TZ=<IANA timezone>` as an environment variable.
+- [ ] **Multi-DC** -- Verify `Kunci` lists all required DC keys; confirm nginx `X-Forwarded-Prefix` header is set.
+- [ ] **TLS** -- Terminate at load balancer or configure `app.ListenTLS`.
+- [ ] **Rate limits** -- Tune `RateLimiter` defaults for expected peak RPS.
+- [ ] **DB pool size** -- Tune pgx `MinConns` / `MaxConns` vs Postgres `max_connections`.
+- [ ] **Worker pool size** -- Tune from load testing results.
+- [ ] **Graceful shutdown** -- Verify `ShutdownWithTimeout` + `pool.Stop()` in `main.go`.
+- [ ] **Logging** -- Switch to structured JSON logging (zerolog / zap) for production.
+- [ ] **Health probes** -- Wire `/live` -> `livenessProbe`, `/ready` -> `readinessProbe`.
+- [ ] **Tests** -- Run `go test -race ./...` before every merge.

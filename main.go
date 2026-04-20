@@ -20,15 +20,27 @@ func main() {
 	log_ := log.NewLoggerWithFilename(cfg.AppName)
 
 	// API-007: configure the global timezone so that time.Now() returns the
-	// correct localized time throughout the entire process. Defaults to UTC
-	// when the Timezone key is absent or set to "UTC".
-	if cfg.Timezone != "" && cfg.Timezone != "UTC" {
-		loc, err := time.LoadLocation(cfg.Timezone)
+	// correct localized time throughout the entire process.
+	//
+	// Priority (highest → lowest):
+	//   1. TZ environment variable   — standard Unix/production override
+	//   2. Timezone key in appsettings.ini — project-level default
+	//   3. UTC                            — safe fallback
+	//
+	// Using the TZ env var allows production deployments (Docker, K8s) to inject
+	// the timezone without touching appsettings.ini. The ini key is kept for local
+	// development convenience.
+	tzName := os.Getenv("TZ")
+	if tzName == "" {
+		tzName = cfg.Timezone
+	}
+	if tzName != "" && tzName != "UTC" {
+		loc, err := time.LoadLocation(tzName)
 		if err != nil {
-			log_.Warnf("Invalid timezone %q in appsettings.ini: %v — falling back to UTC", cfg.Timezone, err)
+			log_.Warnf("Invalid timezone %q: %v — falling back to UTC", tzName, err)
 		} else {
 			time.Local = loc
-			log_.Infof("Timezone set to %s", cfg.Timezone)
+			log_.Infof("Timezone set to %s", tzName)
 		}
 	}
 

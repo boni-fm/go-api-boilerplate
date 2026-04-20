@@ -8,7 +8,7 @@ A production-ready Go REST API boilerplate built on top of the [Fiber](https://g
 
 - **[Fiber v3](https://gofiber.io/)** – Fast, Express-inspired HTTP framework
 - **PostgreSQL** – Database integration via `pgx` / `go-libsd3`
-- **Swagger / OpenAPI** – Auto-generated docs with proxy-path support
+- **Swagger / OpenAPI** – Auto-generated docs with proxy-path support *(dev/staging only)*
 - **Structured logging** – File-based rotating logs via `logrus` + `go-libsd3`
 - **Rate limiting** – 100 requests per minute per client
 - **Panic recovery** – Catches panics and returns a clean 500 JSON response
@@ -17,9 +17,12 @@ A production-ready Go REST API boilerplate built on top of the [Fiber](https://g
 - **Health probes** – Liveness at `/live`, readiness (with DB ping) at `/ready`
 - **Background worker pool** – Bounded goroutine pool for non-critical fire-and-forget tasks (audit logs, events, emails)
 - **Docker support** – Multi-stage `Dockerfile` produces a minimal, non-root Alpine image
-- **Reverse-proxy aware** – Reads `X-Forwarded-Prefix` to adjust Swagger base path
+- **Reverse-proxy aware** – Reads `X-Forwarded-Prefix` for Swagger base path *and* as a tenant-key source
 - **INI-based config** – Simple `appsettings.ini` configuration
+- **Multi-DC / Multi-Tenant** – Route each request to the correct database via the `X-Kunci` header, `?kunci=` query param, or nginx `X-Forwarded-Prefix`
+- **Timezone configuration** – Override `time.Local` via `TZ` env var (production) or `Timezone` in `appsettings.ini` (development)
 - **Layered architecture** – Handler → Service → Repository separation
+- **Developer init scripts** – `setup.sh` / `setup.bat` handle goswitch (exact Go version) without touching the system Go
 
 ---
 
@@ -48,10 +51,18 @@ git clone https://github.com/boni-fm/go-api-boilerplate.git
 cd go-api-boilerplate
 ```
 
-### 2. Install dependencies
+### 2. Run the developer setup script
+
+The setup script verifies your Go version, installs the exact version via
+`golang.org/dl` if needed (**without** touching your system Go), downloads
+modules, installs `swag`, generates docs, and confirms a clean build.
 
 ```bash
-go mod download
+# Linux / macOS
+chmod +x setup.sh && ./setup.sh
+
+# Windows
+setup.bat
 ```
 
 ### 3. Configure the application
@@ -63,15 +74,17 @@ Edit `appsettings.ini`:
 AppName       = Go API Boilerplate
 IsDevelopment = true
 Port          = 8080
-Kunci         = <your-database-key>
+Kunci         = g009sim             # comma-separate for multi-DC: g009sim,g010sim
+Timezone      = Asia/Jakarta        # IANA timezone; overridden by TZ env var
 ```
 
-| Key | Description |
-|-----|-------------|
-| `AppName` | Application name shown in logs and Swagger UI |
-| `IsDevelopment` | Set `true` to enable Swagger auto-generation on startup |
-| `Port` | HTTP port the server listens on |
-| `Kunci` | Database credential key passed to `go-libsd3` |
+| Key | Default | Description |
+|-----|---------|-------------|
+| `AppName` | `Go API Boilerplate` | Application name shown in logs and Swagger UI |
+| `IsDevelopment` | `false` | Set `true` to enable Swagger UI; **disable in production** |
+| `Port` | `8080` | HTTP port the server listens on |
+| `Kunci` | *(required)* | Comma-separated database credential keys for `go-libsd3` |
+| `Timezone` | `UTC` | IANA timezone; overridden by `TZ` environment variable |
 
 ### 4. Run the application
 
@@ -90,6 +103,10 @@ Open `http://localhost:8080/swagger` to view the interactive API documentation.
 go-api-boilerplate/
 ├── main.go                        # Application entry point
 ├── appsettings.ini                # Runtime configuration
+├── setup.sh / setup.bat           # Developer init scripts (goswitch + tool install)
+├── build/
+│   ├── build.sh                   # Cross-platform build (Linux / macOS)
+│   └── build.bat                  # Cross-platform build (Windows)
 ├── Dockerfile                     # Multi-stage production Docker build
 ├── .dockerignore
 ├── go.mod / go.sum
@@ -98,6 +115,7 @@ go-api-boilerplate/
 │   └── initialize.go              # Config struct & INI loader
 │
 ├── docs/                          # Auto-generated Swagger files (do not edit)
+│   ├── developer-handbook.md      # Architecture guide for contributors
 │   ├── docs.go
 │   ├── swagger.json
 │   └── swagger.yaml
@@ -106,47 +124,39 @@ go-api-boilerplate/
 │   ├── api/
 │   │   ├── handlers/              # HTTP handler functions
 │   │   │   ├── BaseHandler.go     # HandlersRegistry (dependency container)
-│   │   │   ├── interfaces.go      # Handler service interfaces
+│   │   │   ├── interfaces.go      # Package doc (interfaces removed — concrete types used)
 │   │   │   ├── PingHandler.go
 │   │   │   ├── UserHandler.go
 │   │   │   └── DocumentationSwaggerHandler.go
 │   │   ├── models/                # Request / response structs
-│   │   │   ├── PingPongModels.go
-│   │   │   └── UserModels.go
 │   │   ├── repository/            # Database access layer
-│   │   │   └── UserRepo.go
 │   │   ├── router/
 │   │   │   └── router.go          # Route registration
 │   │   └── services/              # Business logic
-│   │       ├── PingPongService.go
-│   │       └── UserService.go
 │   │
 │   ├── database/
-│   │   └── db.go                  # PostgreSQL connection initializer
+│   │   └── db.go                  # Registry, context helpers, InitDatabases
 │   │
 │   ├── middleware/
 │   │   ├── initialize.go          # Middleware wiring (registration order)
-│   │   ├── requestid.go           # UUIDv4 X-Request-ID correlation header
-│   │   ├── timeout.go             # 30 s context deadline per request
+│   │   ├── multitenant.go         # Multi-DC tenant key resolution
+│   │   ├── requestid.go
+│   │   ├── timeout.go
 │   │   ├── favicon.go
-│   │   ├── health-check.go        # /live and /ready probes
+│   │   ├── health-check.go
 │   │   ├── logger.go
 │   │   ├── ratelimiter.go
 │   │   └── recover.go
 │   │
 │   ├── server/
-│   │   └── server.go              # Fiber app construction & lifecycle
+│   │   └── server.go
 │   │
 │   ├── worker/
-│   │   └── pool.go                # Bounded background goroutine pool
+│   │   └── pool.go
 │   │
 │   └── utility/
-│       ├── fibererror/            # Global error handler + helpers
-│       │   └── fiber-error.go
-│       └── swagger/               # Swagger generation & proxy utilities
-│           ├── modifier.go
-│           ├── proxypass.go
-│           └── swagger.go
+│       ├── fibererror/
+│       └── swagger/
 │
 └── static/
     └── public/                    # Static assets (favicon, 404 page, …)
@@ -160,12 +170,12 @@ go-api-boilerplate/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Redirects to Swagger UI |
+| `GET` | `/` | Redirects to Swagger UI *(dev only)* |
 | `GET` | `/ping` | Liveness check – returns `{ "message": "Pong" }` |
 | `GET` | `/live` | Liveness probe (returns `200 OK` when the process is running) |
 | `GET` | `/ready` | Readiness probe (returns `200 OK` only when PostgreSQL is reachable) |
-| `GET` | `/swagger` | Interactive Swagger UI |
-| `GET` | `/swagger/doc.json` | Raw OpenAPI JSON |
+| `GET` | `/swagger` | Interactive Swagger UI *(dev only)* |
+| `GET` | `/swagger/doc.json` | Raw OpenAPI JSON *(dev only)* |
 
 ### Users (example CRUD)
 
@@ -176,39 +186,75 @@ go-api-boilerplate/
 | `PUT` | `/api/users/:user_name/password` | Update a user's password |
 | `DELETE` | `/api/users/:user_name` | Delete a user |
 
-#### Create User – `POST /api/users`
+---
 
-```json
-// Request
-{ "user_name": "john_doe", "password": "secret123" }
+## Multi-DC / Multi-Tenant Routing
 
-// Response 201
-{ "success": true, "message": "User created", "user": "john_doe" }
+The `MultiTenantMiddleware` resolves the database connection per-request.  
+Tenant key resolution priority (**highest → lowest**):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | Query parameter `?kunci=` | `GET /api/users?kunci=g010sim` |
+| 2 | Request header `X-Kunci` | `X-Kunci: g010sim` |
+| 3 | Nginx `X-Forwarded-Prefix` first segment | `X-Forwarded-Prefix: /g010sim/api` → `g010sim` |
+| 4 | Default (first key in `appsettings.ini`) | — |
+
+**nginx example** (routes `/g009sim/*` to the service):
+
+```nginx
+location /g009sim/ {
+    proxy_pass         http://go-api:8080/;
+    proxy_set_header   X-Forwarded-Prefix /g009sim;
+}
 ```
 
-#### Get All Users – `GET /api/users`
+Configure multiple connections in `appsettings.ini`:
 
-```json
-// Response 200
-{ "success": true, "data": [ { "user_name": "john_doe" } ] }
+```ini
+Kunci = g009sim,g010sim
 ```
 
-#### Update Password – `PUT /api/users/:user_name/password`
+---
 
-```json
-// Request
-{ "new_password": "newSecret456" }
+## Timezone Configuration
 
-// Response 200
-{ "success": true, "message": "Password updated" }
+Timezone is resolved at process startup. Priority:
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | `TZ` environment variable | `TZ=Asia/Jakarta ./myapp` |
+| 2 | `Timezone` in `appsettings.ini` | `Timezone = Asia/Jakarta` |
+| 3 | UTC (default) | — |
+
+Using the `TZ` env var is the recommended approach for production/Docker deployments:
+
+```bash
+# Docker run
+docker run -p 8080:8080 -e TZ=Asia/Jakarta go-api-boilerplate
+
+# docker-compose
+environment:
+  - TZ=Asia/Jakarta
 ```
 
-#### Delete User – `DELETE /api/users/:user_name`
+---
 
-```json
-// Response 200
-{ "success": true, "message": "User deleted" }
+## Developer Setup (goswitch)
+
+`setup.sh` / `setup.bat` automatically install the exact Go version declared in
+`go.mod` if your system Go differs — **without modifying your system Go**:
+
 ```
+System Go : go1.23.0
+Required  : go1.25.8
+⚠ Installing go1.25.8 via golang.org/dl...
+✓ Using go1.25.8 for this setup run.
+  Tip: add $(go env GOPATH)/bin to PATH and run: go1.25.8 run main.go
+```
+
+The wrapper binary (`go1.25.8`) lives in `$(go env GOPATH)/bin/` and is
+completely independent of your system Go installation.
 
 ---
 
@@ -221,32 +267,6 @@ Follow the existing layer pattern:
 3. **Service** – add business logic in `internal/api/services/`
 4. **Handler** – add HTTP handler methods on `*HandlersRegistry` in `internal/api/handlers/`
 5. **Router** – register routes in `internal/api/router/router.go`
-
-### Example: Adding a "product" resource
-
-```bash
-# Create files following the naming convention
-touch internal/api/models/ProductModels.go
-touch internal/api/repository/ProductRepo.go
-touch internal/api/services/ProductService.go
-touch internal/api/handlers/ProductHandler.go
-```
-
-Inject the new service into `HandlersRegistry` inside `BaseHandler.go`:
-
-```go
-type HandlersRegistry struct {
-    // ...existing fields...
-    ProductService *services.ProductService
-}
-
-func NewHandlersRegistry(log_ *log.Logger, ctx context.Context) *HandlersRegistry {
-    return &HandlersRegistry{
-        // ...existing fields...
-        ProductService: services.NewProductService(log_, ctx),
-    }
-}
-```
 
 ---
 
@@ -264,7 +284,7 @@ Annotate your handlers with `swag` comments:
 // @Param request body models.CreateProductRequest true "Product data"
 // @Success 201 {object} map[string]interface{}
 // @Router /api/products [post]
-func (hr *HandlersRegistry) CreateProduct(c *fiber.Ctx) error { ... }
+func (hr *HandlersRegistry) CreateProduct(c fiber.Ctx) error { ... }
 ```
 
 To regenerate docs manually:
@@ -281,29 +301,25 @@ All middleware is registered in `internal/middleware/initialize.go` in the follo
 
 | # | Middleware | Description |
 |---|------------|-------------|
-| 1 | **RequestID** | Generates a UUIDv4 `X-Request-ID` header (or propagates an incoming one) for log correlation |
+| 1 | **RequestID** | Generates a UUIDv4 `X-Request-ID` header for log correlation |
 | 2 | **Logger** | Structured HTTP request/response logging (logrus) |
 | 3 | **Recover** | Catches panics, logs stack traces, returns `500` JSON |
-| 4 | **Timeout** | Wraps each request's context with a 30 s deadline so DB queries and I/O are cancelled automatically |
-| 5 | **HealthCheck** | `GET /live` → `200 OK` liveness probe; `GET /ready` → `200 OK` only when PostgreSQL responds |
+| 4 | **MultiTenant** | Resolves tenant DB from `?kunci`, `X-Kunci`, or `X-Forwarded-Prefix` |
+| 5 | **Timeout** | Wraps each request's context with a 30 s deadline |
 | 6 | **Favicon** | Serves `/domar.ico` from `static/public/favicon.ico` |
 | 7 | **RateLimiter** | 100 requests / 60 seconds per IP |
-
-> **Note:** HealthCheck is placed *before* RateLimiter so that Kubernetes liveness/readiness probes are never rate-limited.
 
 ---
 
 ## Running with Docker
 
-Build and run the application in a minimal, non-root Alpine container:
-
 ```bash
 # Build the image
 docker build -t go-api-boilerplate .
 
-# Run (pass your database key as an environment variable)
+# Run (pass timezone and database key as environment variables)
 docker run -p 8080:8080 \
-  -e APP_CONFIG_KUNCI=<your-database-key> \
+  -e TZ=Asia/Jakarta \
   go-api-boilerplate
 ```
 
@@ -312,13 +328,9 @@ The `Dockerfile` uses a two-stage build:
 1. **Builder stage** (`golang:1.25-alpine`) – compiles a fully-static binary with `CGO_ENABLED=0`.
 2. **Runtime stage** (`alpine:3.21`) – copies only the binary and static assets; runs as a non-root user (`appuser`).
 
-The image exposes port `8080` and includes a Docker `HEALTHCHECK` that hits `/live` every 10 seconds.
-
 ---
 
 ## Background Worker Pool
-
-The worker pool (`internal/worker.Pool`) allows handlers to dispatch non-critical side-effects asynchronously without blocking the HTTP response:
 
 ```go
 if hr.Pool != nil {
@@ -330,8 +342,6 @@ if hr.Pool != nil {
     }
 }
 ```
-
-The pool is bounded: it has a fixed number of worker goroutines and a buffered job channel. When the channel is full, `Submit` returns `false` (load-shedding) instead of growing unboundedly.
 
 Tune the pool in `internal/server/server.go`:
 
@@ -349,9 +359,10 @@ Tune the pool in `internal/server/server.go`:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `AppName` | `Go API Boilerplate` | Application name |
-| `IsDevelopment` | `false` | Enables Swagger auto-gen on startup |
+| `IsDevelopment` | `false` | Enables Swagger UI; disable in production |
 | `Port` | `8080` | HTTP listen port |
-| `Kunci` | _(required)_ | Database credential key for `go-libsd3` |
+| `Kunci` | *(required)* | Comma-separated database credential keys |
+| `Timezone` | `UTC` | IANA timezone; overridden by `TZ` env var |
 
 ---
 
