@@ -19,13 +19,30 @@ func main() {
 	cfg := config.LoadConfigIni()
 	log_ := log.NewLoggerWithFilename(cfg.AppName)
 
+	// API-007: configure the global timezone so that time.Now() returns the
+	// correct localized time throughout the entire process. Defaults to UTC
+	// when the Timezone key is absent or set to "UTC".
+	if cfg.Timezone != "" && cfg.Timezone != "UTC" {
+		loc, err := time.LoadLocation(cfg.Timezone)
+		if err != nil {
+			log_.Warnf("Invalid timezone %q in appsettings.ini: %v — falling back to UTC", cfg.Timezone, err)
+		} else {
+			time.Local = loc
+			log_.Infof("Timezone set to %s", cfg.Timezone)
+		}
+	}
+
 	// Wire server, middleware, and database.
 	fiberCfg := server.NewFiberConfig(cfg)
 	srv := server.NewServer(cfg, fiberCfg)
 	middlewareDeps := middleware.NewMiddlewareDependencies(log_, srv.App, cfg.IsDevelopment)
 	srv.SetMiddlewareDeps(middlewareDeps)
 
-	database.InitDatabase(cfg.Kunci, log_)
+	// API-001 + API-003: initialise all tenant DB connections and inject the
+	// registry so MultiTenantMiddleware can route each request to the correct
+	// database based on the X-Kunci header.
+	registry := database.InitDatabases(cfg.Kunci, log_)
+	srv.SetRegistry(registry)
 
 	fmt.Println("Service started ~~ ༼ つ ◕_◕ ༽つ")
 	fmt.Println(`

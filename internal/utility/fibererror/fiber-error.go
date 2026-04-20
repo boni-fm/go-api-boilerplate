@@ -92,6 +92,17 @@ func GatewayTimeoutError(err error) fiber.Handler {
 }
 
 // NotFoundError responds with HTTP 404 by serving the static 404 page.
+// If the HTML file is unavailable (e.g. incorrect working directory at
+// deployment), it falls back to a structured JSON response so the caller
+// still receives a well-formed 404 instead of an unhandled error that
+// would cause GlobalErrorHandler to recurse.
 func NotFoundError(c fiber.Ctx) error {
-	return c.Status(fiber.StatusNotFound).SendFile("./static/public/404.html")
+	if err := c.Status(fiber.StatusNotFound).SendFile("./static/public/404.html"); err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(ResponseError{
+			Code:    fiber.StatusNotFound,
+			Error:   "Not Found",
+			Message: "The requested resource was not found.",
+		})
+	}
+	return nil
 }

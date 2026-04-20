@@ -86,3 +86,33 @@ Maret 30, 2026  [Fiber v3 Migration]
      Favicon → RateLimiter (HealthCheck moved to route level)
 [+] Add Immutable: true to fiber.Config — prevents zero-allocation data corruption
      when context values (c.Params, c.Query, c.Get) are captured by worker pool tasks
+
+April 20, 2026  [Boilerplate 3.0 — Architecture Refactor]
+[API-001] Remove global database.Db variable. Implement full Dependency Injection:
+     :: InitDatabases returns *database.Registry; DB is stored in request context
+     :: Repository methods retrieve DB via database.DBFromContext(ctx)
+     :: database.ErrNoDB returned when context is missing a DB connection
+[API-002] Complete Swagger feature flag: swagger UI routes now only registered
+     when IsDevelopment = true; previously only swag init was gated
+[API-003] Multi-DC / Multi-Tenant support via database.Registry + MultiTenantMiddleware:
+     :: Middleware reads X-Kunci header → looks up DB in registry → stores in context
+     :: Comma-separated Kunci in appsettings.ini connects to multiple data centers
+     :: First listed kunci is the default fallback when no header is present
+     :: Middleware order updated: RequestID → Logger → Recover → MultiTenant →
+        Timeout → Favicon → RateLimiter
+[API-005] Add cross-platform build scripts: build/build.sh and build/build.bat
+     :: Reads AppName from appsettings.ini for output binary name
+     :: Supports GOOS/GOARCH overrides for cross-compilation
+     :: Outputs to bin/<AppName>[.exe]
+[API-006] Simplify architecture — remove service-level UserServiceIface:
+     :: HandlersRegistry.UserService is now *services.UserService (concrete type)
+     :: Testability preserved at the repository layer (mock UserRepository interface)
+     :: Handler tests refactored: mock at repo level → inject into real UserService
+[API-007] Timezone configuration via appsettings.ini (Timezone = Asia/Jakarta):
+     :: time.Local overridden at startup so time.Now() returns localized time
+     :: Invalid timezone names log a warning and fall back to UTC
+[API-008] Fix 404 handler: add JSON fallback when static/public/404.html is
+     unavailable, preventing GlobalErrorHandler recursion on missing file
+[API-009] Add developer init scripts: setup.sh and setup.bat
+     :: Verifies Go version, downloads modules, installs swag, generates docs,
+        confirms clean build, and prints onboarding instructions
