@@ -207,7 +207,7 @@ echo -e "   1. Copy appsettings.ini and fill in your database credentials (Kunci
 echo -e "   2. Set IsDevelopment = true for local development (enables Swagger UI)."
 echo -e "   3. Set Timezone to your region (e.g. Asia/Jakarta), or export TZ env var."
 echo -e "   4. For multi-DC: set Kunci = g009sim,g010sim (comma-separated)."
-echo -e "   5. Run the server:  ${CYAN}${GO_CMD} run main.go${RESET}"
+echo -e "   5. Run the server:  ${CYAN}\"${GO_CMD}\" run main.go${RESET}"
 echo -e "   6. Open Swagger UI: http://localhost:8080/swagger"
 echo ""
 echo -e "  ${BOLD}Go version switching (does NOT affect other projects):${RESET}"
