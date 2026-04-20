@@ -127,8 +127,10 @@ func (p *Pool) Submit(job Job) bool {
 }
 
 // Stop signals workers to finish draining the existing queue and then exit.
-// In-flight jobs are not interrupted; they receive a cancelled context so that
-// they can exit early if they check ctx.Done().
+// In-flight jobs receive a cancelled context so that they can exit early if
+// they check ctx.Done(). Queued-but-not-yet-started jobs will likewise see
+// the cancelled context — if a job needs to survive shutdown (e.g. a final
+// audit-log flush), it should create its own context internally.
 //
 // Stop blocks until every worker goroutine has returned. It is safe to call
 // multiple times (idempotent).

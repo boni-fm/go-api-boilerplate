@@ -86,3 +86,95 @@ Maret 30, 2026  [Fiber v3 Migration]
      Favicon → RateLimiter (HealthCheck moved to route level)
 [+] Add Immutable: true to fiber.Config — prevents zero-allocation data corruption
      when context values (c.Params, c.Query, c.Get) are captured by worker pool tasks
+
+April 20, 2026  [Boilerplate 3.0 — Architecture Refactor]
+[API-001] Remove global database.Db variable. Implement full Dependency Injection:
+     :: InitDatabases returns *database.Registry; DB is stored in request context
+     :: Repository methods retrieve DB via database.DBFromContext(ctx)
+     :: database.ErrNoDB returned when context is missing a DB connection
+[API-002] Complete Swagger feature flag: swagger UI routes now only registered
+     when IsDevelopment = true; previously only swag init was gated
+[API-003] Multi-DC / Multi-Tenant support via database.Registry + MultiTenantMiddleware:
+     :: Middleware reads X-Kunci header → looks up DB in registry → stores in context
+     :: Comma-separated Kunci in appsettings.ini connects to multiple data centers
+     :: First listed kunci is the default fallback when no header is present
+     :: Middleware order updated: RequestID → Logger → Recover → MultiTenant →
+        Timeout → Favicon → RateLimiter
+[API-005] Add cross-platform build scripts: build/build.sh and build/build.bat
+     :: Reads AppName from appsettings.ini for output binary name
+     :: Supports GOOS/GOARCH overrides for cross-compilation
+     :: Outputs to bin/<AppName>[.exe]
+[API-006] Simplify architecture — remove service-level UserServiceIface:
+     :: HandlersRegistry.UserService is now *services.UserService (concrete type)
+     :: Testability preserved at the repository layer (mock UserRepository interface)
+     :: Handler tests refactored: mock at repo level → inject into real UserService
+[API-007] Timezone configuration via appsettings.ini (Timezone = Asia/Jakarta):
+     :: time.Local overridden at startup so time.Now() returns localized time
+     :: Invalid timezone names log a warning and fall back to UTC
+[API-008] Fix 404 handler: add JSON fallback when static/public/404.html is
+     unavailable, preventing GlobalErrorHandler recursion on missing file
+[API-009] Add developer init scripts: setup.sh and setup.bat
+     :: Verifies Go version, downloads modules, installs swag, generates docs,
+        confirms clean build, and prints onboarding instructions
+
+April 20, 2026  [Boilerplate 3.0 — Follow-up Enhancements]
+[API-003] Extend Multi-DC kunci resolution to three sources (priority order):
+     :: 1. Query parameter  ?kunci=<key>        (highest priority)
+     :: 2. Request header   X-Kunci: <key>
+     :: 3. Nginx header     X-Forwarded-Prefix  (first path segment = key)
+     :: 4. Default connection fallback           (first key in appsettings.ini)
+     :: Add multitenant_test.go covering nil registry, empty registry,
+        query-param priority, and X-Forwarded-Prefix extraction edge cases
+[API-007] Add TZ environment variable override for production deployments:
+     :: Priority: TZ env var > appsettings.ini Timezone > UTC
+     :: Allows Docker/K8s to inject timezone without touching config file
+[API-009] Update setup.sh and setup.bat with goswitch support:
+     :: Reads required version from go.mod; installs exact version via
+        golang.org/dl/go<version> if system Go differs
+     :: Does NOT modify the developer's system Go installation
+     :: Sets GO_CMD variable for remainder of script; prints usage tip
+     :: Added step 6: run go test ./... after build
+[DOCS] Update README.md: add Multi-DC routing table, Timezone priority table,
+     goswitch section, middleware order table, updated config reference
+[DOCS] Rewrite developer-handbook.md (Boilerplate 3.0):
+     :: New sections: Multi-DC/Multi-Tenant Routing, Timezone Configuration,
+        Developer Setup & goswitch
+     :: Updated architecture diagram shows MultiTenant middleware and dual-DC
+     :: Updated Adding a New Domain Endpoint example uses DBFromContext(ctx)
+        instead of deprecated global database.Db
+     :: Updated production checklist includes Swagger flag, TZ, Multi-DC items
+April 20, 2026  [Boilerplate 3.1 — Lead Architect Audit]
+[ARC-001] CRITICAL: Fix error message leakage in GlobalErrorHandler:
+     :: Non-Fiber errors previously passed raw err.Error() to clients —
+        could expose SQL queries, internal paths, or stack traces
+     :: GlobalErrorHandler now returns generic "An unexpected error occurred."
+     :: Helper functions (InternalServerError, BadRequestError, GatewayTimeoutError)
+        changed from handler-factory pattern func(error) fiber.Handler to direct
+        func(fiber.Ctx, string) error — callers explicitly provide safe messages
+     :: Removed per-status-code switch cases that duplicated the default branch
+[ARC-002] MAJOR: Add 15-second startup timeout to database initialization:
+     :: initSingle now uses context.WithTimeout(context.Background(), 15s)
+     :: Process fails fast if PostgreSQL is unreachable instead of hanging forever
+[ARC-003] MINOR: Document worker pool shutdown context behaviour:
+     :: cancel() -> close(jobs) -> wg.Wait() order is intentional for cooperative shutdown
+     :: Jobs needing to survive shutdown should create their own internal context
+[ARC-004] MAJOR: Add database connection close on graceful shutdown:
+     :: New Registry.Close() method closes all registered *postgres.Database connections
+     :: Called in main.go after pool.Stop() during graceful shutdown
+     :: Prevents pgx pool leaks and lingering idle connections on PostgreSQL
+[ARC-005] MAJOR: Fix multitenant_test to exercise actual middleware:
+     :: TestResolveKunci_Priority was re-implementing resolveKunci logic inline
+        instead of testing the real MultiTenantMiddleware
+     :: Rewrote test to use real middleware + middleware.ResolvedKunci(c) export
+[ARC-006] MINOR: Add tenant key observability to MultiTenantMiddleware:
+     :: Resolved key stored in c.Locals via middleware.ResolvedKunci(c)
+     :: Enables downstream handlers and logging middleware to inspect which
+        DC was selected for the request
+[ARC-007] MINOR: Simplify GlobalErrorHandler — remove handler-factory indirection:
+     :: BadRequestError(err)(c) pattern created a fiber.Handler closure then
+        immediately invoked it — added indirection with no benefit
+     :: All cases inlined into the default branch of the switch
+[DOCS] Update developer-handbook.md to Boilerplate 3.1:
+     :: New section 2: Architecture Review — Audit 3.1 (Lead Architect)
+     :: Includes technical deep-dive, findings table, scorecard, and verdict
+     :: Updated production checklist with DB timeout, registry.Close(), ARC-001 items

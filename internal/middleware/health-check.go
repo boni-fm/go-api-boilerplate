@@ -34,28 +34,23 @@ func LivenessHandler() fiber.Handler {
 // ReadinessHandler returns a Fiber handler for the readiness probe.
 // Register it on the desired path (conventionally /ready or /readyz):
 //
-//	app.Get("/ready", middleware.ReadinessHandler())
+//	app.Get("/ready", middleware.ReadinessHandler(registry))
 //
-// The probe pings PostgreSQL with a [readinessTimeout] deadline. A 503 is
-// returned when the database is unreachable, preventing traffic from being
-// routed to the pod before it can serve requests.
-func ReadinessHandler() fiber.Handler {
+// The probe pings the default PostgreSQL connection with a [readinessTimeout]
+// deadline. A 503 is returned when the database is unreachable.
+func ReadinessHandler(registry *database.Registry) fiber.Handler {
 	return healthcheck.New(healthcheck.Config{
-		Probe: readinessProbe,
+		Probe: func(_ fiber.Ctx) bool {
+			if registry == nil {
+				return false
+			}
+			db := registry.Default()
+			if db == nil {
+				return false
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), readinessTimeout)
+			defer cancel()
+			return db.Ping(ctx) == nil
+		},
 	})
-}
-
-// readinessProbe checks that the database is reachable. It creates a
-// short-lived context with a timeout so that a slow or partitioned DB
-// does not block the probe indefinitely.
-func readinessProbe(_ fiber.Ctx) bool {
-	db := database.GetDatabase()
-	if db == nil {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), readinessTimeout)
-	defer cancel()
-
-	return db.Ping(ctx) == nil
 }

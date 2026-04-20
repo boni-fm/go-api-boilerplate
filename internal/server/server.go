@@ -4,6 +4,7 @@ import (
 	"context"
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/api/router"
+	"go-api-boilerplate/internal/database"
 	"go-api-boilerplate/internal/middleware"
 	"go-api-boilerplate/internal/utility/fibererror"
 	"go-api-boilerplate/internal/utility/swagger"
@@ -34,16 +35,16 @@ type FiberConfig struct {
 }
 
 // Server owns the Fiber application, its configuration, the middleware
-// dependency graph, and the background worker pool. All fields should be
-// treated as read-only after Start is called.
+// dependency graph, the background worker pool, and the database registry.
+// All fields should be treated as read-only after Start is called.
 type Server struct {
 	App            *fiber.App
 	Cfg            *config.Config
 	MiddlewareDeps *middleware.MiddlewareDependencies
 	// Pool is the shared bounded worker pool for background tasks.
-	// Handlers receive an injected reference via HandlersRegistry; they must
-	// not retain a direct pointer to Server.
 	Pool *worker.Pool
+	// Registry holds the named database connections for multi-tenant routing.
+	Registry *database.Registry
 }
 
 func NewFiberConfig(cfg config.Config) *FiberConfig {
@@ -89,13 +90,19 @@ func (s *Server) SetMiddlewareDeps(middlewareDeps *middleware.MiddlewareDependen
 	s.MiddlewareDeps = middlewareDeps
 }
 
+// SetRegistry stores the database registry so that middleware and routes can
+// resolve tenant-specific connections at request time.
+func (s *Server) SetRegistry(registry *database.Registry) {
+	s.Registry = registry
+}
+
 func (s *Server) Start() error {
 	// Launch background worker pool before accepting HTTP traffic so that
 	// handlers can dispatch tasks from the very first request.
 	s.Pool.Start(context.Background())
 
-	s.MiddlewareDeps.InitAllMiddleware()
-	router.SetupRoutes(s.MiddlewareDeps.Log, s.App, s.Pool)
+	s.MiddlewareDeps.InitAllMiddleware(s.Registry)
+	router.SetupRoutes(s.MiddlewareDeps.Log, s.App, s.Pool, s.Registry, s.Cfg.IsDevelopment)
 
 	if s.Cfg.IsDevelopment {
 		swagger.SwaggerSetup()

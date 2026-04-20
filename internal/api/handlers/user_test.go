@@ -13,42 +13,48 @@ import (
 
 	"go-api-boilerplate/internal/api/handlers"
 	"go-api-boilerplate/internal/api/models"
+	"go-api-boilerplate/internal/api/repository"
+	"go-api-boilerplate/internal/api/services"
 
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"github.com/gofiber/fiber/v3"
 )
 
-// ----- mock service -----
+// ----- mock repository -----
+// Mocking at the repository layer (not the service layer) keeps the handler
+// tests honest: the real UserService business logic (bcrypt hashing, etc.)
+// runs as part of the test, and only the database I/O is stubbed out.
 
-type mockUserSvc struct {
-	createErr error
-	getUsers  []models.UserResponse
+type mockUserRepo struct {
+	addErr    error
 	getErr    error
 	updateErr error
 	deleteErr error
+	users     []models.UserResponse
 }
 
-func (m *mockUserSvc) CreateUser(_ context.Context, _, _ string) error {
-	return m.createErr
+func (m *mockUserRepo) AddUser(_ context.Context, _, _ string) error {
+	return m.addErr
 }
-func (m *mockUserSvc) GetUsers(_ context.Context) ([]models.UserResponse, error) {
-	return m.getUsers, m.getErr
+func (m *mockUserRepo) GetAllUsers(_ context.Context) ([]models.UserResponse, error) {
+	return m.users, m.getErr
 }
-func (m *mockUserSvc) UpdateUserPassword(_ context.Context, _, _ string) error {
+func (m *mockUserRepo) UpdateUserPassword(_ context.Context, _, _ string) error {
 	return m.updateErr
 }
-func (m *mockUserSvc) DeleteUser(_ context.Context, _ string) error {
+func (m *mockUserRepo) DeleteUser(_ context.Context, _ string) error {
 	return m.deleteErr
 }
 
-// compile-time check
-var _ handlers.UserServiceIface = (*mockUserSvc)(nil)
+// compile-time check that mockUserRepo satisfies the repository interface.
+var _ repository.UserRepository = (*mockUserRepo)(nil)
 
 // ----- helpers -----
 
-func newTestRouter(t *testing.T, svc handlers.UserServiceIface) *fiber.App {
+func newTestRouter(t *testing.T, repo repository.UserRepository) *fiber.App {
 	t.Helper()
 	l := log.NewLoggerWithFilename("test")
+	svc := services.NewUserService(l, repo)
 	hr := handlers.NewHandlersRegistryForTest(l, svc)
 	app := fiber.New()
 	app.Post("/api/users", hr.CreateUser)
@@ -70,8 +76,8 @@ func jsonBody(t *testing.T, v interface{}) io.Reader {
 // ----- CreateUser -----
 
 func TestCreateUser_Success(t *testing.T) {
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{"user_name": "alice", "password": "secret"})
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
@@ -96,8 +102,8 @@ func TestCreateUser_MissingFields(t *testing.T) {
 		{"both missing", map[string]string{}},
 	}
 
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -116,8 +122,8 @@ func TestCreateUser_MissingFields(t *testing.T) {
 }
 
 func TestCreateUser_InvalidJSON(t *testing.T) {
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewBufferString("{not-json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -132,8 +138,8 @@ func TestCreateUser_InvalidJSON(t *testing.T) {
 }
 
 func TestCreateUser_ServiceError(t *testing.T) {
-	svc := &mockUserSvc{createErr: errors.New("db error")}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{addErr: errors.New("db error")}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{"user_name": "alice", "password": "secret"})
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
@@ -152,8 +158,8 @@ func TestCreateUser_ServiceError(t *testing.T) {
 
 func TestGetUsers_Success(t *testing.T) {
 	users := []models.UserResponse{{UserName: "alice"}, {UserName: "bob"}}
-	svc := &mockUserSvc{getUsers: users}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{users: users}
+	app := newTestRouter(t, repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
@@ -179,8 +185,8 @@ func TestGetUsers_Success(t *testing.T) {
 }
 
 func TestGetUsers_ServiceError(t *testing.T) {
-	svc := &mockUserSvc{getErr: errors.New("db error")}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{getErr: errors.New("db error")}
+	app := newTestRouter(t, repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
@@ -195,8 +201,8 @@ func TestGetUsers_ServiceError(t *testing.T) {
 // ----- UpdateUserPassword -----
 
 func TestUpdateUserPassword_Success(t *testing.T) {
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{"new_password": "newpass"})
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
@@ -212,8 +218,8 @@ func TestUpdateUserPassword_Success(t *testing.T) {
 }
 
 func TestUpdateUserPassword_MissingNewPassword(t *testing.T) {
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{})
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
@@ -229,8 +235,8 @@ func TestUpdateUserPassword_MissingNewPassword(t *testing.T) {
 }
 
 func TestUpdateUserPassword_ServiceError(t *testing.T) {
-	svc := &mockUserSvc{updateErr: errors.New("db error")}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{updateErr: errors.New("db error")}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{"new_password": "newpass"})
 	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/password", body)
@@ -248,8 +254,8 @@ func TestUpdateUserPassword_ServiceError(t *testing.T) {
 // ----- DeleteUser -----
 
 func TestDeleteUser_Success(t *testing.T) {
-	svc := &mockUserSvc{}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{}
+	app := newTestRouter(t, repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
@@ -262,8 +268,8 @@ func TestDeleteUser_Success(t *testing.T) {
 }
 
 func TestDeleteUser_ServiceError(t *testing.T) {
-	svc := &mockUserSvc{deleteErr: errors.New("db error")}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{deleteErr: errors.New("db error")}
+	app := newTestRouter(t, repo)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/users/alice", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
@@ -279,8 +285,8 @@ func TestDeleteUser_ServiceError(t *testing.T) {
 
 func TestErrorResponses_UseStandardShape(t *testing.T) {
 	// Verify that all error responses include the standard {code, error, message} shape.
-	svc := &mockUserSvc{createErr: errors.New("some error")}
-	app := newTestRouter(t, svc)
+	repo := &mockUserRepo{addErr: errors.New("some error")}
+	app := newTestRouter(t, repo)
 
 	body := jsonBody(t, map[string]string{"user_name": "x", "password": "y"})
 	req := httptest.NewRequest(http.MethodPost, "/api/users", body)

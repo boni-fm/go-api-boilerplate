@@ -16,6 +16,10 @@ type Config struct {
 	IsDevelopment bool
 	Kunci         string
 	Port          string
+	// Timezone is an IANA timezone name (e.g. "Asia/Jakarta"). When set,
+	// time.Local is overridden at startup so that time.Now() returns the
+	// correct localized time across the entire process.
+	Timezone string
 }
 
 // LoadConfigIni loads configuration from the default "appsettings.ini" file
@@ -39,5 +43,6 @@ func LoadConfigIniFromPath(path string) Config {
 		IsDevelopment: cfg.Section("CONFIG").Key("IsDevelopment").MustBool(false),
 		Kunci:         cfg.Section("CONFIG").Key("Kunci").String(),
 		Port:          cfg.Section("CONFIG").Key("Port").MustString("8080"),
+		Timezone:      cfg.Section("CONFIG").Key("Timezone").MustString("UTC"),
 	}
 }
