@@ -1,4 +1,4 @@
-# Boilerplate 3.0 — Developer Handbook
+# Boilerplate 3.1 — Developer Handbook
 
 **Audience:** Software engineers in the ITSD3 / SD3 department who clone this
 template to build a new microservice.
@@ -8,20 +8,21 @@ template to build a new microservice.
 ## Table of Contents
 
 1. [Boilerplate Audit Results](#audit-results)
-2. [Architecture Overview](#architecture-overview)
-3. [Multi-DC / Multi-Tenant Routing](#multi-dc--multi-tenant-routing)
-4. [Timezone Configuration](#timezone-configuration)
-5. [Developer Setup & goswitch](#developer-setup--goswitch)
-6. [Project Structure](#project-structure)
-7. [Adding a New Domain Endpoint — Step-by-Step](#adding-a-new-domain-endpoint)
-8. [Using the Background Worker Pool](#using-the-background-worker-pool)
-9. [Production Checklist](#production-checklist)
+2. [Architecture Review — Audit 3.1 (Lead Architect)](#architecture-review--audit-31)
+3. [Architecture Overview](#architecture-overview)
+4. [Multi-DC / Multi-Tenant Routing](#multi-dc--multi-tenant-routing)
+5. [Timezone Configuration](#timezone-configuration)
+6. [Developer Setup & goswitch](#developer-setup--goswitch)
+7. [Project Structure](#project-structure)
+8. [Adding a New Domain Endpoint — Step-by-Step](#adding-a-new-domain-endpoint)
+9. [Using the Background Worker Pool](#using-the-background-worker-pool)
+10. [Production Checklist](#production-checklist)
 
 ---
 
 ## 1. Boilerplate Audit Results
 
-### 1.1 Vulnerability Log (all fixed)
+### 1.1 Vulnerability Log — Audit 2.0 (all fixed)
 
 | # | Category | Finding | Fix applied |
 |---|---|---|---|
@@ -37,7 +38,7 @@ template to build a new microservice.
 | 10 | **Service-level interfaces** | `UserServiceIface` in handler layer — unnecessary abstraction | Removed; handlers use `*services.UserService`; mocking at repository level |
 | 11 | **404 static-file recursion** | `NotFoundError` propagated `SendFile` error — could recurse into `GlobalErrorHandler` | Added JSON fallback when `SendFile` fails |
 
-### 1.2 Rating
+### 1.2 Rating (Audit 2.0)
 
 | Dimension | Score | Justification |
 |---|---|---|
@@ -47,7 +48,53 @@ template to build a new microservice.
 
 ---
 
-## 2. Architecture Overview
+## 2. Architecture Review — Audit 3.1 (Lead Architect)
+
+### 2.1 Technical Deep-Dive
+
+| Area | Assessment |
+|---|---|
+| **Dependency Injection** | ✅ **Pass.** DB is non-global. `database.Registry` uses `sync.RWMutex` → thread-safe. Every request gets its own `*postgres.Database` via context. No shared mutable state between requests. |
+| **Multi-DC/Tenant Logic** | ✅ **Pass.** Three-source priority chain (`?kunci` → `X-Kunci` → `X-Forwarded-Prefix`) is clean and well-documented. `resolveKunci` is a pure function. |
+| **Middleware** | ✅ **Pass (after ARC-001 fix).** Error handling now never leaks internal Go error strings. Consistent `ResponseError` envelope on every status code. Recover middleware captures stack traces. |
+| **Build System** | ✅ **Pass.** `setup.sh` / `setup.bat` handle goswitch via `golang.org/dl` without modifying the system Go. `build.sh` / `build.bat` support cross-compilation. |
+| **Go Idioms** | ✅ **Pass.** `time.Local` override is the documented stdlib pattern for process-wide timezone. TZ env var is the standard Unix mechanism. Concrete types over unnecessary interfaces is the right tradeoff for this codebase size. |
+
+### 2.2 Findings & Fixes (all fixed)
+
+| Ticket | Severity | Observation | Fix Applied |
+|---|---|---|---|
+| **ARC-001** | **Critical** | `GlobalErrorHandler` fallback for non-Fiber errors passed raw `err.Error()` to clients via `InternalServerError(err)(c)`. This could leak SQL queries, internal paths, or stack traces in production. | Sanitized: non-Fiber errors now return generic `"An unexpected error occurred."` message. Handler helpers changed from `func(error) fiber.Handler` to `func(fiber.Ctx, string) error` so callers explicitly provide a safe message. |
+| **ARC-002** | **Major** | `initSingle` in `database/db.go` used `context.Background()` with no timeout. If PostgreSQL is unreachable at startup, the process hangs indefinitely. | Added 15-second `dbConnectTimeout` context. Process now fails fast on unreachable DB. |
+| **ARC-003** | **Minor** | Worker pool `Stop()` cancels context before closing the channel. Queued-but-not-yet-started jobs see a cancelled context. | Kept current order (cancel → close → wait) which is correct for cooperative shutdown. Added documentation that jobs needing to survive shutdown should create their own context. |
+| **ARC-004** | **Major** | `main.go` graceful shutdown stopped the worker pool but never closed database connections, leaving pgx pools undrained and idle connections on PostgreSQL. | Added `Registry.Close()` method; called in shutdown sequence after pool drain. |
+| **ARC-005** | **Major** | `TestResolveKunci_Priority` re-implemented `resolveKunci` logic inline instead of testing the actual `MultiTenantMiddleware`. If the middleware had a bug, the test wouldn't catch it. | Rewrote test to exercise the real middleware with a real `Registry`, using `middleware.ResolvedKunci(c)` to capture the resolved key. |
+| **ARC-006** | **Minor** | `MultiTenantMiddleware` resolved the DB connection silently with no observability. | Resolved key is now stored via `c.Locals` and accessible through `middleware.ResolvedKunci(c)` for logging/tracing. |
+| **ARC-007** | **Minor** | `GlobalErrorHandler` used a handler-factory pattern (`BadRequestError(err)(c)`) — creating a `fiber.Handler` closure then immediately invoking it. This added indirection with no benefit since GlobalErrorHandler is already a handler. | Inlined all switch cases into the `default` branch. Removed per-status-code cases (400, 504, 500) that duplicated the default behavior. |
+
+### 2.3 Scorecard — Audit 3.1
+
+| Category | Score | Justification |
+|---|---|---|
+| **Maintainability** | 9 / 10 | Clean layered architecture, godocs on all exports, consistent patterns across packages. Improvement path: structured logging migration (logrus → slog/zerolog). |
+| **Performance** | 8 / 10 | No hidden bottlenecks. Bounded worker pool with load-shedding. `Immutable: true` prevents fasthttp zero-alloc data corruption. `sync.RWMutex` on Registry is the right choice. DB init now has startup timeout. |
+| **Simplicity** | 9 / 10 | Architecture is genuinely simple, not just unstructured. Concrete types, no unnecessary abstractions, single-file-per-concern. Junior devs can trace the full flow: HTTP → Handler → Service → Repository → DB. |
+| **Reliability** | 8 / 10 | 404s handled with JSON fallback. Panics recovered with stack traces. DB failures surface via readiness probe. Graceful shutdown drains pool + DB. Room to grow: circuit breaker on DB, request retry middleware. |
+
+### 2.4 Lead's Verdict
+
+**Status:** ✅ **APPROVED for Production** (post ARC-001 – ARC-007 fixes)
+
+**Final Rating:** 8.5 / 10
+
+The boilerplate is well-architected for the department's needs: Multi-DC routing is robust,
+DX is excellent (5-minute setup via goswitch scripts), and the code follows Go idioms.
+The critical ARC-001 security fix (error message leakage) was the blocking item; with it
+resolved, the boilerplate is production-ready.
+
+---
+
+## 3. Architecture Overview
 
 ```
 HTTP Request
@@ -99,7 +146,7 @@ HTTP Request
 
 ---
 
-## 3. Multi-DC / Multi-Tenant Routing
+## 4. Multi-DC / Multi-Tenant Routing
 
 ### How it works
 
@@ -139,7 +186,7 @@ The first key (`g009sim`) is the default fallback.
 
 ---
 
-## 4. Timezone Configuration
+## 5. Timezone Configuration
 
 ### Resolution order (highest -> lowest)
 
@@ -171,7 +218,7 @@ env:
 
 ---
 
-## 5. Developer Setup & goswitch
+## 6. Developer Setup & goswitch
 
 Run `./setup.sh` (Linux/macOS) or `setup.bat` (Windows) once after cloning.
 
@@ -204,7 +251,7 @@ conflict.
 
 ---
 
-## 6. Project Structure
+## 7. Project Structure
 
 ```
 .
@@ -250,7 +297,7 @@ conflict.
 
 ---
 
-## 7. Adding a New Domain Endpoint
+## 8. Adding a New Domain Endpoint
 
 ### Worked example: User Profile
 
@@ -258,7 +305,7 @@ Suppose you need a `GET /api/users/:user_name/profile` endpoint.
 
 ---
 
-### 7.1 Model — `internal/api/models/ProfileModels.go`
+### 8.1 Model — `internal/api/models/ProfileModels.go`
 
 ```go
 package models
@@ -272,7 +319,7 @@ type ProfileResponse struct {
 
 ---
 
-### 7.2 Repository — `internal/api/repository/ProfileRepo.go`
+### 8.2 Repository — `internal/api/repository/ProfileRepo.go`
 
 ```go
 package repository
@@ -314,7 +361,7 @@ func (r *PostgresProfileRepository) GetProfile(
 
 ---
 
-### 7.3 Service — `internal/api/services/ProfileService.go`
+### 8.3 Service — `internal/api/services/ProfileService.go`
 
 ```go
 package services
@@ -351,7 +398,7 @@ func (s *ProfileService) GetProfile(
 
 ---
 
-### 7.4 Handler — `internal/api/handlers/ProfileHandler.go`
+### 8.4 Handler — `internal/api/handlers/ProfileHandler.go`
 
 ```go
 package handlers
@@ -385,7 +432,7 @@ func (hr *HandlersRegistry) GetProfile(c fiber.Ctx) error {
 
 ---
 
-### 7.5 Wire into HandlersRegistry — `BaseHandler.go`
+### 8.5 Wire into HandlersRegistry — `BaseHandler.go`
 
 ```go
 type HandlersRegistry struct {
@@ -411,7 +458,7 @@ func NewHandlersRegistry(log_ *log.Logger, pool *worker.Pool) *HandlersRegistry 
 
 ---
 
-### 7.6 Register route — `router.go`
+### 8.6 Register route — `router.go`
 
 ```go
 app.Get("/api/users/:user_name/profile", handlers.GetProfile)
@@ -419,7 +466,7 @@ app.Get("/api/users/:user_name/profile", handlers.GetProfile)
 
 ---
 
-### 7.7 Write tests — `profile_test.go`
+### 8.7 Write tests — `profile_test.go`
 
 ```go
 package handlers_test
@@ -476,7 +523,7 @@ func TestGetProfile_Success(t *testing.T) {
 
 ---
 
-## 8. Using the Background Worker Pool
+## 9. Using the Background Worker Pool
 
 The worker pool (`internal/worker.Pool`) is injected into every `HandlersRegistry`
 at startup. Handlers access it via `hr.Pool`.
@@ -519,7 +566,7 @@ func (hr *HandlersRegistry) CreateOrder(c fiber.Ctx) error {
 
 ---
 
-## 9. Production Checklist
+## 10. Production Checklist
 
 - [ ] **Secrets** -- DB credentials injected via env vars, **not** in `appsettings.ini`.
 - [ ] **Swagger disabled** -- Set `IsDevelopment = false`.
@@ -528,8 +575,10 @@ func (hr *HandlersRegistry) CreateOrder(c fiber.Ctx) error {
 - [ ] **TLS** -- Terminate at load balancer or configure `app.ListenTLS`.
 - [ ] **Rate limits** -- Tune `RateLimiter` defaults for expected peak RPS.
 - [ ] **DB pool size** -- Tune pgx `MinConns` / `MaxConns` vs Postgres `max_connections`.
+- [ ] **DB startup timeout** -- `dbConnectTimeout` (15 s) is suitable for most environments; increase if connecting across WAN.
 - [ ] **Worker pool size** -- Tune from load testing results.
-- [ ] **Graceful shutdown** -- Verify `ShutdownWithTimeout` + `pool.Stop()` in `main.go`.
+- [ ] **Graceful shutdown** -- Verify `ShutdownWithTimeout` + `pool.Stop()` + `registry.Close()` in `main.go`.
+- [ ] **Error messages** -- Confirm no internal error strings leak to clients (ARC-001).
 - [ ] **Logging** -- Switch to structured JSON logging (zerolog / zap) for production.
 - [ ] **Health probes** -- Wire `/live` -> `livenessProbe`, `/ready` -> `readinessProbe`.
 - [ ] **Tests** -- Run `go test -race ./...` before every merge.

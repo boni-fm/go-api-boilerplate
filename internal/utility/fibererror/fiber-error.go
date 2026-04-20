@@ -26,21 +26,23 @@ type ResponseError struct {
 // status code. Without it, any Fiber error not explicitly listed (e.g. 401, 403,
 // 405, 408, 413, 429) would be incorrectly returned as HTTP 500, making real
 // client errors impossible to diagnose in production.
+//
+// ARC-001 / ARC-007: error messages returned to clients are the canonical HTTP
+// reason phrase — never raw Go error strings. Internal details (SQL errors,
+// stack traces, etc.) must only appear in server-side logs. The previous
+// handler-factory indirection (e.g. BadRequestError(err)(c)) has been inlined
+// for clarity: the GlobalErrorHandler itself is already a handler, so wrapping
+// the response in an additional fiber.Handler adds no value.
 func GlobalErrorHandler(c fiber.Ctx, err error) error {
 	if e, ok := err.(*fiber.Error); ok {
 		switch e.Code {
-		case fiber.StatusBadRequest:
-			return BadRequestError(err)(c)
-		case fiber.StatusGatewayTimeout:
-			return GatewayTimeoutError(err)(c)
 		case fiber.StatusNotFound:
 			return NotFoundError(c)
-		case fiber.StatusInternalServerError:
-			return InternalServerError(err)(c)
 		default:
-			// Preserve the exact HTTP status code for all other Fiber errors.
-			// http.StatusText maps code → canonical reason phrase (e.g. 401 →
-			// "Unauthorized", 403 → "Forbidden", 413 → "Request Entity Too Large").
+			// Preserve the exact HTTP status code and use the canonical HTTP
+			// reason phrase as the error label. The Message field carries the
+			// Fiber error message which, for framework-generated errors, is
+			// already a safe, human-readable string.
 			return c.Status(e.Code).JSON(ResponseError{
 				Code:    e.Code,
 				Error:   http.StatusText(e.Code),
@@ -48,47 +50,47 @@ func GlobalErrorHandler(c fiber.Ctx, err error) error {
 			})
 		}
 	}
-	return InternalServerError(err)(c)
+
+	// Non-Fiber errors (returned by handler/service code) are treated as 500.
+	// ARC-001: NEVER expose err.Error() to clients — it may contain SQL
+	// queries, internal paths, or stack traces. Use a generic message.
+	return c.Status(fiber.StatusInternalServerError).JSON(ResponseError{
+		Code:    fiber.StatusInternalServerError,
+		Error:   "Internal Server Error",
+		Message: "An unexpected error occurred. Please try again later.",
+	})
 }
 
-// InternalServerError returns a handler that responds with HTTP 500 and a
-// ResponseError body containing the error detail.
-func InternalServerError(err error) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusInternalServerError).JSON(ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: err.Error(),
-		})
-	}
+// InternalServerError is a convenience helper for handlers that need to return
+// a generic 500 response with a caller-specified safe message. The message
+// must NOT contain raw Go error strings — log those server-side instead.
+func InternalServerError(c fiber.Ctx, message string) error {
+	return c.Status(fiber.StatusInternalServerError).JSON(ResponseError{
+		Code:    fiber.StatusInternalServerError,
+		Error:   "Internal Server Error",
+		Message: message,
+	})
 }
 
-// BadRequestError returns a handler that responds with HTTP 400 and a
-// ResponseError body containing the error detail.
-func BadRequestError(err error) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusBadRequest).JSON(ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: err.Error(),
-		})
-	}
+// BadRequestError is a convenience helper for handlers that need to return a
+// 400 response with a caller-specified safe message.
+func BadRequestError(c fiber.Ctx, message string) error {
+	return c.Status(fiber.StatusBadRequest).JSON(ResponseError{
+		Code:    fiber.StatusBadRequest,
+		Error:   "Bad Request",
+		Message: message,
+	})
 }
 
-// GatewayTimeoutError returns a handler that responds with HTTP 504 and a
-// ResponseError body with a standard upstream-timeout message.
-//
-// The Error field uses the canonical HTTP reason phrase "Gateway Timeout"
-// (matching net/http.StatusText(504)) for consistency with the default case
-// in GlobalErrorHandler. Descriptive context is carried by the Message field.
-func GatewayTimeoutError(err error) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusGatewayTimeout).JSON(ResponseError{
-			Code:    fiber.StatusGatewayTimeout,
-			Error:   "Gateway Timeout",
-			Message: "The upstream service did not respond in time.",
-		})
-	}
+// GatewayTimeoutError is a convenience helper for handlers that need to return
+// a 504 response. The message is always a generic upstream-timeout string to
+// avoid leaking backend topology information.
+func GatewayTimeoutError(c fiber.Ctx) error {
+	return c.Status(fiber.StatusGatewayTimeout).JSON(ResponseError{
+		Code:    fiber.StatusGatewayTimeout,
+		Error:   "Gateway Timeout",
+		Message: "The upstream service did not respond in time.",
+	})
 }
 
 // NotFoundError responds with HTTP 404 by serving the static 404 page.

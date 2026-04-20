@@ -3,7 +3,6 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,28 +51,31 @@ func TestMultiTenantMiddleware_EmptyRegistry(t *testing.T) {
 }
 
 // TestResolveKunci_Priority verifies the query-param → X-Kunci → X-Forwarded-Prefix
-// resolution order by reading the resolved value back via an echo handler.
+// resolution order by reading the resolved value back via middleware.ResolvedKunci.
+//
+// ARC-005: this test now exercises the ACTUAL MultiTenantMiddleware and its
+// internal resolveKunci function rather than duplicating the logic inline.
 func TestResolveKunci_Priority(t *testing.T) {
 	tests := []struct {
-		name        string
-		url         string
-		xKunci      string
-		xFwdPrefix  string
-		wantKunci   string // "" means "no key sent — captured empty"
+		name       string
+		url        string
+		xKunci     string
+		xFwdPrefix string
+		wantKunci  string // "" means "no key sent — captured empty"
 	}{
 		{
-			name:      "query param wins over all",
-			url:       "/test?kunci=qparam",
-			xKunci:    "header-key",
+			name:       "query param wins over all",
+			url:        "/test?kunci=qparam",
+			xKunci:     "header-key",
 			xFwdPrefix: "/prefix-key",
-			wantKunci: "qparam",
+			wantKunci:  "qparam",
 		},
 		{
-			name:      "X-Kunci wins over prefix",
-			url:       "/test",
-			xKunci:    "header-key",
+			name:       "X-Kunci wins over prefix",
+			url:        "/test",
+			xKunci:     "header-key",
 			xFwdPrefix: "/prefix-key",
-			wantKunci: "header-key",
+			wantKunci:  "header-key",
 		},
 		{
 			name:       "X-Forwarded-Prefix used when no higher source",
@@ -110,26 +112,15 @@ func TestResolveKunci_Priority(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			var captured string
+
+			// Use a real registry so the middleware runs its full code path.
+			registry := database.NewRegistry()
 			app := fiber.New()
-			app.Use(func(c fiber.Ctx) error {
-				// Mirror the resolveKunci priority without calling the unexported helper.
-				if k := c.Query("kunci"); k != "" {
-					captured = k
-					return c.Next()
-				}
-				if k := c.Get("X-Kunci"); k != "" {
-					captured = k
-					return c.Next()
-				}
-				if prefix := c.Get("X-Forwarded-Prefix"); prefix != "" {
-					seg := strings.SplitN(strings.Trim(prefix, "/"), "/", 2)[0]
-					captured = seg
-					return c.Next()
-				}
-				captured = ""
-				return c.Next()
+			app.Use(middleware.MultiTenantMiddleware(registry))
+			app.Get("/test", func(c fiber.Ctx) error {
+				captured = middleware.ResolvedKunci(c)
+				return c.SendStatus(http.StatusOK)
 			})
-			app.Get("/test", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
 			if tc.xKunci != "" {

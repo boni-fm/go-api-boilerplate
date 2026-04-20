@@ -143,3 +143,38 @@ April 20, 2026  [Boilerplate 3.0 — Follow-up Enhancements]
      :: Updated Adding a New Domain Endpoint example uses DBFromContext(ctx)
         instead of deprecated global database.Db
      :: Updated production checklist includes Swagger flag, TZ, Multi-DC items
+April 20, 2026  [Boilerplate 3.1 — Lead Architect Audit]
+[ARC-001] CRITICAL: Fix error message leakage in GlobalErrorHandler:
+     :: Non-Fiber errors previously passed raw err.Error() to clients —
+        could expose SQL queries, internal paths, or stack traces
+     :: GlobalErrorHandler now returns generic "An unexpected error occurred."
+     :: Helper functions (InternalServerError, BadRequestError, GatewayTimeoutError)
+        changed from handler-factory pattern func(error) fiber.Handler to direct
+        func(fiber.Ctx, string) error — callers explicitly provide safe messages
+     :: Removed per-status-code switch cases that duplicated the default branch
+[ARC-002] MAJOR: Add 15-second startup timeout to database initialization:
+     :: initSingle now uses context.WithTimeout(context.Background(), 15s)
+     :: Process fails fast if PostgreSQL is unreachable instead of hanging forever
+[ARC-003] MINOR: Document worker pool shutdown context behaviour:
+     :: cancel() -> close(jobs) -> wg.Wait() order is intentional for cooperative shutdown
+     :: Jobs needing to survive shutdown should create their own internal context
+[ARC-004] MAJOR: Add database connection close on graceful shutdown:
+     :: New Registry.Close() method closes all registered *postgres.Database connections
+     :: Called in main.go after pool.Stop() during graceful shutdown
+     :: Prevents pgx pool leaks and lingering idle connections on PostgreSQL
+[ARC-005] MAJOR: Fix multitenant_test to exercise actual middleware:
+     :: TestResolveKunci_Priority was re-implementing resolveKunci logic inline
+        instead of testing the real MultiTenantMiddleware
+     :: Rewrote test to use real middleware + middleware.ResolvedKunci(c) export
+[ARC-006] MINOR: Add tenant key observability to MultiTenantMiddleware:
+     :: Resolved key stored in c.Locals via middleware.ResolvedKunci(c)
+     :: Enables downstream handlers and logging middleware to inspect which
+        DC was selected for the request
+[ARC-007] MINOR: Simplify GlobalErrorHandler — remove handler-factory indirection:
+     :: BadRequestError(err)(c) pattern created a fiber.Handler closure then
+        immediately invoked it — added indirection with no benefit
+     :: All cases inlined into the default branch of the switch
+[DOCS] Update developer-handbook.md to Boilerplate 3.1:
+     :: New section 2: Architecture Review — Audit 3.1 (Lead Architect)
+     :: Includes technical deep-dive, findings table, scorecard, and verdict
+     :: Updated production checklist with DB timeout, registry.Close(), ARC-001 items

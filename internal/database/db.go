@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/boni-fm/go-libsd3/pkg/db/postgres"
 	"github.com/boni-fm/go-libsd3/pkg/log"
@@ -67,6 +68,27 @@ func (r *Registry) DefaultKey() string {
 	return r.defaultKey
 }
 
+// Close closes all registered database connections. It should be called
+// during graceful shutdown so that connection pools are drained properly
+// and PostgreSQL is not left with lingering idle connections (ARC-004).
+// Errors are collected but not fatal — the process is shutting down.
+func (r *Registry) Close() []error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var errs []error
+	for k, db := range r.connections {
+		if err := db.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close %s: %w", k, err))
+		}
+	}
+	return errs
+}
+
+// dbConnectTimeout is the maximum time allowed for a single database
+// connection to be established during startup. If PostgreSQL is unreachable
+// the process fails fast instead of hanging indefinitely (ARC-002).
+const dbConnectTimeout = 15 * time.Second
+
 // InitDatabases connects to every kunci listed in the comma-separated
 // kunci string (e.g. "g009sim,g010sim") and registers them in a new Registry.
 // It panics via log.Panicf if any connection cannot be established.
@@ -85,9 +107,14 @@ func InitDatabases(kunci string, log_ *log.Logger) *Registry {
 }
 
 // initSingle opens a single PostgreSQL connection pool for the given kunci.
+// ARC-002: a timeout is applied so the process fails fast when the database
+// is unreachable instead of blocking the startup sequence indefinitely.
 func initSingle(kunci string, log_ *log.Logger) *postgres.Database {
+	ctx, cancel := context.WithTimeout(context.Background(), dbConnectTimeout)
+	defer cancel()
+
 	dbcfg := postgres.Config{KodeDC: kunci}
-	db, err := postgres.NewDatabase(context.Background(), &dbcfg)
+	db, err := postgres.NewDatabase(ctx, &dbcfg)
 	if err != nil {
 		log_.Panicf("Failed to connect to database [%s]: %v", kunci, err)
 	}

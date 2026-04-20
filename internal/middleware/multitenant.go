@@ -9,6 +9,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// kunciContextKey is used to store the resolved tenant key in the Fiber
+// context so that tests and downstream handlers can inspect which key was
+// selected without coupling to the internal resolveKunci function.
+type kunciContextKey struct{}
+
 // MultiTenantMiddleware resolves the database connection for each request
 // and stores it in the request context via database.WithDB. Downstream
 // repository calls retrieve the connection with database.DBFromContext.
@@ -35,11 +40,22 @@ func MultiTenantMiddleware(registry *database.Registry) fiber.Handler {
 			if d, ok := registry.Get(kunci); ok {
 				db = d
 			}
+			// ARC-006: store the resolved key in the Fiber-local context so
+			// that tests and observability middleware can inspect it.
+			c.Locals(kunciContextKey{}, kunci)
 		}
 
 		c.SetContext(database.WithDB(c.Context(), db))
 		return c.Next()
 	}
+}
+
+// ResolvedKunci returns the tenant key that MultiTenantMiddleware resolved
+// for the current request, or "" if no explicit key was found. This is
+// intended for test assertions and observability (ARC-005 / ARC-006).
+func ResolvedKunci(c fiber.Ctx) string {
+	v, _ := c.Locals(kunciContextKey{}).(string)
+	return v
 }
 
 // resolveKunci determines the tenant key from the request using the

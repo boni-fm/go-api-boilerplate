@@ -90,6 +90,13 @@ func main() {
 		}
 		// 2. Drain the worker pool so no background tasks are abandoned.
 		srv.Pool.Stop()
+		// 3. ARC-004: close all database connections to drain pgx pools
+		//    and avoid leaving idle connections on PostgreSQL.
+		if errs := registry.Close(); len(errs) > 0 {
+			for _, e := range errs {
+				log_.Errorf("DB close error: %v", e)
+			}
+		}
 		log_.Info("Server exited gracefully.")
 	}
 }
