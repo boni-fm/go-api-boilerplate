@@ -69,8 +69,10 @@ else
         "$GOSWITCH_BIN" download 2>/dev/null || true
         GO_CMD="$GOSWITCH_BIN"
         echo -e "  ${GREEN}✓ Using go${REQUIRED_VERSION} for this setup run.${RESET}"
-        echo -e "  ${CYAN}  Tip: add \$(go env GOPATH)/bin to your PATH and run:${RESET}"
+        echo -e "  ${CYAN}  To use go${REQUIRED_VERSION} in future terminal sessions:${RESET}"
+        echo -e "  ${CYAN}    1. Add \$(go env GOPATH)/bin to your PATH, then run:${RESET}"
         echo -e "  ${CYAN}       go${REQUIRED_VERSION} run main.go${RESET}"
+        echo -e "  ${CYAN}    2. Or use the full path: ${GOSWITCH_BIN} run main.go${RESET}"
     else
         echo -e "  ${YELLOW}  ⚠ Wrapper not found. Continuing with system go.${RESET}"
     fi
@@ -144,7 +146,7 @@ echo -e "   1. Copy appsettings.ini and fill in your database credentials (Kunci
 echo -e "   2. Set IsDevelopment = true for local development (enables Swagger UI)."
 echo -e "   3. Set Timezone to your region (e.g. Asia/Jakarta), or export TZ env var."
 echo -e "   4. For multi-DC: set Kunci = g009sim,g010sim (comma-separated)."
-echo -e "   5. Run the server:  ${CYAN}${GO_CMD} run main.go${RESET}"
+echo -e "   5. Run the server:  ${CYAN}${GO_CMD} run main.go${RESET} (or: go run main.go)"
 echo -e "   6. Open Swagger UI: http://localhost:8080/swagger"
 echo ""
 echo -e "   To build a release binary:  ${CYAN}./build/build.sh [GOOS] [GOARCH]${RESET}"

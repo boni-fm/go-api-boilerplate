@@ -64,8 +64,10 @@ if "!CURRENT_VERSION!"=="!REQUIRED_VERSION!" (
         "!GOSWITCH_BIN!" download 2>nul
         set "GO_CMD=!GOSWITCH_BIN!"
         echo   OK Using go!REQUIRED_VERSION! for this setup run.
-        echo      Tip: add %%GOPATH%%\bin to your PATH and run:
-        echo           go!REQUIRED_VERSION! run main.go
+        echo      To use go!REQUIRED_VERSION! in future sessions:
+        echo       1. Add %%GOPATH%%\bin to your PATH, then run:
+        echo              go!REQUIRED_VERSION! run main.go
+        echo       2. Or use the full path: !GOSWITCH_BIN! run main.go
     ) else (
         echo   WARNING Wrapper not found. Continuing with system go.
     )
@@ -153,7 +155,7 @@ echo    1. Edit appsettings.ini with your database credentials (Kunci).
 echo    2. Set IsDevelopment = true for local development (enables Swagger UI).
 echo    3. Set Timezone to your region (e.g. Asia/Jakarta), or set TZ env var.
 echo    4. For multi-DC: set Kunci = g009sim,g010sim (comma-separated).
-echo    5. Run the server:  !GO_CMD! run main.go
+echo    5. Run the server:  !GO_CMD! run main.go (or: go run main.go)
 echo    6. Open Swagger UI: http://localhost:8080/swagger
 echo.
 echo   To build a release binary:  build\build.bat [GOOS] [GOARCH]

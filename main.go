@@ -34,7 +34,7 @@ func main() {
 	if tzName == "" {
 		tzName = cfg.Timezone
 	}
-	if tzName != "" && tzName != "UTC" {
+	if tzName != "" {
 		loc, err := time.LoadLocation(tzName)
 		if err != nil {
 			log_.Warnf("Invalid timezone %q: %v — falling back to UTC", tzName, err)

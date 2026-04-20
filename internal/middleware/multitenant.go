@@ -56,9 +56,10 @@ func resolveKunci(c fiber.Ctx) string {
 	}
 
 	// 3. Nginx reverse-proxy header: X-Forwarded-Prefix: /<key>[/optional/path]
-	//    Extract the first non-empty path segment (strip leading "/").
+	//    Extract the first non-empty path segment as the tenant key.
+	//    SplitN(..., 2) gives at most two parts — we only need the first one,
+	//    discarding any trailing sub-paths (e.g. "/g009sim/api" → "g009sim").
 	if prefix := c.Get("X-Forwarded-Prefix"); prefix != "" {
-		// Trim surrounding slashes then split; take the first segment only.
 		segment := strings.SplitN(strings.Trim(prefix, "/"), "/", 2)[0]
 		if segment != "" {
 			return segment

@@ -108,5 +108,5 @@ func DBFromContext(ctx context.Context) *postgres.Database {
 }
 
 // ErrNoDB is returned by repository methods when no database connection
-// is found in the request context (e.g. MultiTenantMiddleware was skipped).
-var ErrNoDB = fmt.Errorf("no database in request context: ensure MultiTenantMiddleware is registered")
+// is found in the request context.
+var ErrNoDB = fmt.Errorf("no database in request context")
