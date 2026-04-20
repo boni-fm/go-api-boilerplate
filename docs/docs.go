@@ -32,17 +32,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Users retrieved successfully",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/models.UsersListResponse"
                         }
                     },
                     "500": {
                         "description": "Failed to fetch users",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     }
                 }
@@ -79,21 +75,15 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid request format",
+                        "description": "Invalid request format or missing fields",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     }
                 }
@@ -132,10 +122,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Failed to delete user",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     }
                 }
@@ -181,21 +168,15 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid request format",
+                        "description": "Invalid request format or missing fields",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     },
                     "500": {
                         "description": "Failed to update password",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/fibererror.ResponseError"
                         }
                     }
                 }
@@ -273,6 +254,20 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "fibererror.ResponseError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "models.CreateUserRequest": {
             "type": "object",
             "properties": {
@@ -306,6 +301,34 @@ const docTemplate = `{
                 "new_password": {
                     "type": "string",
                     "example": "newpassword123"
+                }
+            }
+        },
+        "models.UserResponse": {
+            "type": "object",
+            "properties": {
+                "user_name": {
+                    "type": "string",
+                    "example": "john_doe"
+                }
+            }
+        },
+        "models.UsersListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.UserResponse"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Users retrieved successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         }

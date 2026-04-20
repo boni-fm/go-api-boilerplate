@@ -1,4 +1,13 @@
 definitions:
+  fibererror.ResponseError:
+    properties:
+      code:
+        type: integer
+      error:
+        type: string
+      message:
+        type: string
+    type: object
   models.CreateUserRequest:
     properties:
       password:
@@ -23,6 +32,25 @@ definitions:
         example: newpassword123
         type: string
     type: object
+  models.UserResponse:
+    properties:
+      user_name:
+        example: john_doe
+        type: string
+    type: object
+  models.UsersListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.UserResponse'
+        type: array
+      message:
+        example: Users retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
 info:
   contact: {}
 paths:
@@ -37,14 +65,11 @@ paths:
         "200":
           description: Users retrieved successfully
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.UsersListResponse'
         "500":
           description: Failed to fetch users
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
       summary: Get all users
       tags:
       - users
@@ -68,17 +93,13 @@ paths:
             additionalProperties: true
             type: object
         "400":
-          description: Invalid request format
+          description: Invalid request format or missing fields
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
       summary: Create a new user
       tags:
       - users
@@ -104,9 +125,7 @@ paths:
         "500":
           description: Failed to delete user
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
       summary: Delete a user
       tags:
       - users
@@ -136,17 +155,13 @@ paths:
             additionalProperties: true
             type: object
         "400":
-          description: Invalid request format
+          description: Invalid request format or missing fields
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
         "500":
           description: Failed to update password
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/fibererror.ResponseError'
       summary: Update user password
       tags:
       - users
