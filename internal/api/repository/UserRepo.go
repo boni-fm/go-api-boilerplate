@@ -1,6 +1,10 @@
 // Package repository provides the concrete PostgreSQL implementation of the
 // UserRepository interface. All functions accept pre-hashed password values;
 // hashing is the responsibility of the service (business) layer.
+//
+// The database connection is retrieved from the request context via
+// database.DBFromContext — it must be set by MultiTenantMiddleware before any
+// repository method is called.
 package repository
 
 import (
@@ -23,17 +27,25 @@ func NewPostgresUserRepository() UserRepository {
 // AddUser inserts a new user row. passwordHash must already be a bcrypt hash
 // produced by the service layer — this function stores it verbatim.
 func (r *PostgresUserRepository) AddUser(ctx context.Context, userName, passwordHash string) error {
+	db := database.DBFromContext(ctx)
+	if db == nil {
+		return database.ErrNoDB
+	}
 	query := `INSERT INTO dc_user_t (user_name, user_password, user_app_modul) VALUES ($1, $2, 'GOLANG')`
-	_, err := database.Db.Exec(ctx, query, userName, passwordHash)
+	_, err := db.Exec(ctx, query, userName, passwordHash)
 	return err
 }
 
 // GetAllUsers retrieves every user record, returning only the username.
 // Passwords (even hashed) are never returned to callers.
 func (r *PostgresUserRepository) GetAllUsers(ctx context.Context) ([]models.UserResponse, error) {
+	db := database.DBFromContext(ctx)
+	if db == nil {
+		return nil, database.ErrNoDB
+	}
 	var users []models.UserResponse
 	query := `SELECT user_name FROM dc_user_t`
-	if err := database.Db.SelectAll(ctx, &users, query); err != nil {
+	if err := db.SelectAll(ctx, &users, query); err != nil {
 		return nil, err
 	}
 	return users, nil
@@ -42,14 +54,22 @@ func (r *PostgresUserRepository) GetAllUsers(ctx context.Context) ([]models.User
 // UpdateUserPassword replaces the stored password hash for the given user.
 // passwordHash must already be a bcrypt hash produced by the service layer.
 func (r *PostgresUserRepository) UpdateUserPassword(ctx context.Context, userName, passwordHash string) error {
+	db := database.DBFromContext(ctx)
+	if db == nil {
+		return database.ErrNoDB
+	}
 	query := `UPDATE dc_user_t SET user_password = $1 WHERE user_name = $2`
-	_, err := database.Db.Exec(ctx, query, passwordHash, userName)
+	_, err := db.Exec(ctx, query, passwordHash, userName)
 	return err
 }
 
 // DeleteUser permanently removes the user row identified by userName.
 func (r *PostgresUserRepository) DeleteUser(ctx context.Context, userName string) error {
+	db := database.DBFromContext(ctx)
+	if db == nil {
+		return database.ErrNoDB
+	}
 	query := `DELETE FROM dc_user_t WHERE user_name = $1`
-	_, err := database.Db.Exec(ctx, query, userName)
+	_, err := db.Exec(ctx, query, userName)
 	return err
 }
