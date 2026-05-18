@@ -2,13 +2,15 @@ package main
 
 import (
 	"fmt"
+	"go-api-boilerplate/internal/database"
+	"go-api-boilerplate/internal/utility/injector"
+	"go-api-boilerplate/internal/utility/tztime"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"go-api-boilerplate/config"
-	"go-api-boilerplate/internal/database"
 	"go-api-boilerplate/internal/middleware"
 	"go-api-boilerplate/internal/server"
 
@@ -16,51 +18,66 @@ import (
 )
 
 func main() {
+	/*
+		INITIALIZE AWAL APLIKASI
+
+		------------
+			*Note ::
+				jika ingin ada perubahan, ... take it with your own risk ...
+				jadi minimalisir perubahan di bagian core api ...
+	*/
+
+	fmt.Println("[Startup] Initializing configuration dependencies...")
 	cfg := config.LoadConfigIni()
 	log_ := log.NewLoggerWithFilename(cfg.AppName)
 
-	// API-007: configure the global timezone so that time.Now() returns the
-	// correct localized time throughout the entire process.
-	//
-	// Priority (highest → lowest):
-	//   1. TZ environment variable   — standard Unix/production override
-	//   2. Timezone key in appsettings.ini — project-level default
-	//   3. UTC                            — safe fallback
-	//
-	// Using the TZ env var allows production deployments (Docker, K8s) to inject
-	// the timezone without touching appsettings.ini. The ini key is kept for local
-	// development convenience.
-	tzName := os.Getenv("TZ")
-	if tzName == "" {
-		tzName = cfg.Timezone
-	}
-	if tzName != "" {
-		loc, err := time.LoadLocation(tzName)
-		if err != nil {
-			log_.Warnf("Invalid timezone %q: %v — falling back to UTC", tzName, err)
-		} else {
-			time.Local = loc
-			log_.Infof("Timezone set to %s", tzName)
-		}
-	}
+	// Disini setup timezone secara global
+	// untuk resolved time.Now() sesuai dengan timezone aplikasinya
+	// versi debug (isDevelopment = false), akan baca setting timezone sesuai dengan appsettings.ini
+	tztime.SetupTimezone(log_, &cfg)
 
 	// Wire server, middleware, and database.
 	fiberCfg := server.NewFiberConfig(cfg)
 	srv := server.NewServer(cfg, fiberCfg)
-	middlewareDeps := middleware.NewMiddlewareDependencies(log_, srv.App, cfg.IsDevelopment)
+
+	dbManager := database.GetDcAdapter(cfg.AppName, log_)
+	middlewareDeps := middleware.NewMiddlewareDependencies(
+		log_,
+		srv.App,
+		cfg.IsDevelopment,
+	)
+
+	// Function dibawah dipakai untuk case kodedc dari appsetting.ini
+	// jadi db nya akan di register/preconnect ke adapter
+	// kemudian di inject lgsg kedalam repo ...
+	//
+	// Untuk menggunakan ini, pastikan kunci di appsettings.ini ada
+	// dan pastikan handler tidak menggunakan middleware multidc
+	// kalau ingin pakai fungsi diatas (kunci hardcode)
+	//
+	// Inject ke seluruh penjuru repo
+	//dbInjector := injector.NewStaticInjector(dbManager, cfg.KodeDc) //jadi ditaro dalam memory ~
+
+	// Ini untuk multidc
+	// kalau ingin pakai fungsi diatas (kunci hardcode)
+	// bisa comment atau hapus line dibawah
+	// jadi db injector nya dalam bentuk static, bkn dari local
+	dbInjector := injector.NewLocalsInjector()
+
 	srv.SetMiddlewareDeps(middlewareDeps)
+	srv.SetDbAdapter(dbManager)
+	srv.SetInjector(dbInjector)
 
-	// API-001 + API-003: initialise all tenant DB connections and inject the
-	// registry so MultiTenantMiddleware can route each request to the correct
-	// database based on the X-Kunci header.
-	registry := database.InitDatabases(cfg.Kunci, log_)
-	srv.SetRegistry(registry)
-
-	fmt.Println("Service started ~~ ༼ つ ◕_◕ ༽つ")
+	fmt.Println("Service starting ~~ ༼ つ ◕_◕ ༽つ")
 	fmt.Println(`
-      ┌──────────────────────────────────────────┐
-      │ IT SOFTWARE DEVELOPMENT 3 GO-API SERVICE │
-      └──────────────────────────────────────────┘
+		 /$$$$$$ /$$$$$$$$        /$$$$$$  /$$$$$$$         /$$$$$$ 
+		|_  $$_/|__  $$__/       /$$__  $$| $$__  $$       /$$__  $$
+		  | $$     | $$         | $$  \__/| $$  \ $$      |__/  \ $$
+		  | $$     | $$         |  $$$$$$ | $$  | $$         /$$$$$/
+		  | $$     | $$          \____  $$| $$  | $$        |___  $$
+		  | $$     | $$          /$$  \ $$| $$  | $$       /$$  \ $$
+		 /$$$$$$   | $$         |  $$$$$$/| $$$$$$$/      |  $$$$$$/
+		|______/   |__/          \______/ |_______/        \______/ 
 	`)
 
 	// Graceful shutdown: listen for SIGTERM / SIGINT in the background while
@@ -90,13 +107,7 @@ func main() {
 		}
 		// 2. Drain the worker pool so no background tasks are abandoned.
 		srv.Pool.Stop()
-		// 3. ARC-004: close all database connections to drain pgx pools
-		//    and avoid leaving idle connections on PostgreSQL.
-		if errs := registry.Close(); len(errs) > 0 {
-			for _, e := range errs {
-				log_.Errorf("DB close error: %v", e)
-			}
-		}
+
 		log_.Info("Server exited gracefully.")
 	}
 }

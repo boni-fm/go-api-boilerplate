@@ -28,6 +28,15 @@ const docTemplate = `{
                     "users"
                 ],
                 "summary": "Get all users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "KodeDC",
+                        "name": "KodeDC",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Users retrieved successfully",

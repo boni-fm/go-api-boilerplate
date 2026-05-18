@@ -59,6 +59,12 @@ paths:
       consumes:
       - application/json
       description: Retrieve a list of all registered users
+      parameters:
+      - description: KodeDC
+        in: query
+        name: KodeDC
+        required: true
+        type: string
       produces:
       - application/json
       responses:

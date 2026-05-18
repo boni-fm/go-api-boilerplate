@@ -6,10 +6,12 @@ package services
 import (
 	"context"
 	"fmt"
+	"go-api-boilerplate/config"
 
 	"go-api-boilerplate/internal/api/models"
 	"go-api-boilerplate/internal/api/repository"
 
+	"github.com/boni-fm/go-libsd3/pkg/db/postgres"
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,16 +20,19 @@ import (
 // It depends on a UserRepository interface, allowing the concrete
 // database implementation to be swapped out during testing.
 type UserService struct {
+	db   *postgres.Database
 	log_ *log.Logger
-	repo repository.UserRepository
+	cfg  *config.Config
+	repo *repository.UserRepository
 }
 
 // NewUserService constructs a UserService with the given logger and repository.
 // Inject a mock repository in tests to avoid any database dependency.
-func NewUserService(log_ *log.Logger, repo repository.UserRepository) *UserService {
+func NewUserService(db *postgres.Database, log_ *log.Logger, cfg *config.Config) *UserService {
 	return &UserService{
 		log_: log_,
-		repo: repo,
+		cfg:  cfg,
+		repo: repository.NewUserRepository(db),
 	}
 }
 

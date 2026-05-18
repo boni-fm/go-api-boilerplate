@@ -12,40 +12,42 @@ import (
 
 	"go-api-boilerplate/internal/api/models"
 	"go-api-boilerplate/internal/database"
+
+	"github.com/boni-fm/go-libsd3/pkg/db/postgres"
 )
 
-// PostgresUserRepository is the production UserRepository backed by PostgreSQL.
+// UserRepository is the production UserRepository backed by PostgreSQL.
 // Create instances with NewPostgresUserRepository; never embed directly in tests.
-type PostgresUserRepository struct{}
+type UserRepository struct {
+	db *postgres.Database
+}
 
 // NewPostgresUserRepository returns a new PostgresUserRepository that satisfies
 // the UserRepository interface.
-func NewPostgresUserRepository() UserRepository {
-	return &PostgresUserRepository{}
+func NewUserRepository(db *postgres.Database) *UserRepository {
+	return &UserRepository{db: db}
 }
 
 // AddUser inserts a new user row. passwordHash must already be a bcrypt hash
 // produced by the service layer — this function stores it verbatim.
-func (r *PostgresUserRepository) AddUser(ctx context.Context, userName, passwordHash string) error {
-	db := database.DBFromContext(ctx)
-	if db == nil {
+func (r *UserRepository) AddUser(ctx context.Context, userName, passwordHash string) error {
+	if r.db == nil {
 		return database.ErrNoDB
 	}
 	query := `INSERT INTO dc_user_t (user_name, user_password, user_app_modul) VALUES ($1, $2, 'GOLANG')`
-	_, err := db.Exec(ctx, query, userName, passwordHash)
+	_, err := r.db.Exec(ctx, query, userName, passwordHash)
 	return err
 }
 
 // GetAllUsers retrieves every user record, returning only the username.
 // Passwords (even hashed) are never returned to callers.
-func (r *PostgresUserRepository) GetAllUsers(ctx context.Context) ([]models.UserResponse, error) {
-	db := database.DBFromContext(ctx)
-	if db == nil {
+func (r *UserRepository) GetAllUsers(ctx context.Context) ([]models.UserResponse, error) {
+	if r.db == nil {
 		return nil, database.ErrNoDB
 	}
 	var users []models.UserResponse
 	query := `SELECT user_name FROM dc_user_t`
-	if err := db.SelectAll(ctx, &users, query); err != nil {
+	if err := r.db.SelectAll(ctx, &users, query); err != nil {
 		return nil, err
 	}
 	return users, nil
@@ -53,23 +55,21 @@ func (r *PostgresUserRepository) GetAllUsers(ctx context.Context) ([]models.User
 
 // UpdateUserPassword replaces the stored password hash for the given user.
 // passwordHash must already be a bcrypt hash produced by the service layer.
-func (r *PostgresUserRepository) UpdateUserPassword(ctx context.Context, userName, passwordHash string) error {
-	db := database.DBFromContext(ctx)
-	if db == nil {
+func (r *UserRepository) UpdateUserPassword(ctx context.Context, userName, passwordHash string) error {
+	if r.db == nil {
 		return database.ErrNoDB
 	}
 	query := `UPDATE dc_user_t SET user_password = $1 WHERE user_name = $2`
-	_, err := db.Exec(ctx, query, passwordHash, userName)
+	_, err := r.db.Exec(ctx, query, passwordHash, userName)
 	return err
 }
 
 // DeleteUser permanently removes the user row identified by userName.
-func (r *PostgresUserRepository) DeleteUser(ctx context.Context, userName string) error {
-	db := database.DBFromContext(ctx)
-	if db == nil {
+func (r *UserRepository) DeleteUser(ctx context.Context, userName string) error {
+	if r.db == nil {
 		return database.ErrNoDB
 	}
 	query := `DELETE FROM dc_user_t WHERE user_name = $1`
-	_, err := db.Exec(ctx, query, userName)
+	_, err := r.db.Exec(ctx, query, userName)
 	return err
 }

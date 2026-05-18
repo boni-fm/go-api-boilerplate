@@ -16,6 +16,7 @@ type Config struct {
 	IsDevelopment bool
 	Kunci         string
 	Port          string
+
 	// Timezone is an IANA timezone name (e.g. "Asia/Jakarta"). When set,
 	// time.Local is overridden at startup so that time.Now() returns the
 	// correct localized time across the entire process.
@@ -35,14 +36,14 @@ func LoadConfigIni() Config {
 func LoadConfigIniFromPath(path string) Config {
 	cfg, err := ini.Load(path)
 	if err != nil {
-		log.Fatalf("Failed to read config file: %v", err)
+		log.Fatalf("Gagal membaca config file appsettings.ini, pastikan file tersebut ada dalam directory \n err :: %v", err)
 	}
 
 	return Config{
-		AppName:       cfg.Section("CONFIG").Key("AppName").MustString("Go API Boilerplate"),
+		AppName:       cfg.Section("CONFIG").Key("AppName").MustString("GoAPIBoilerplate"),
 		IsDevelopment: cfg.Section("CONFIG").Key("IsDevelopment").MustBool(false),
 		Kunci:         cfg.Section("CONFIG").Key("Kunci").String(),
 		Port:          cfg.Section("CONFIG").Key("Port").MustString("8080"),
-		Timezone:      cfg.Section("CONFIG").Key("Timezone").MustString("UTC"),
+		Timezone:      cfg.Section("CONFIG").Key("Timezone").MustString("Asia/Jakarta"),
 	}
 }

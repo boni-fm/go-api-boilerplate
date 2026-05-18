@@ -1,9 +1,11 @@
 package router
 
 import (
+	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/api/handlers"
 	"go-api-boilerplate/internal/database"
 	"go-api-boilerplate/internal/middleware"
+	"go-api-boilerplate/internal/utility/injector"
 	"go-api-boilerplate/internal/utility/swagger"
 	"go-api-boilerplate/internal/worker"
 	"strings"
@@ -18,23 +20,18 @@ import (
 //
 // Swagger UI routes are only registered when isDevelopment is true, keeping the
 // API documentation endpoint disabled in production builds.
-func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool, registry *database.Registry, isDevelopment bool) {
-	handlers := handlers.NewHandlersRegistry(log, pool)
+func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool, dcAdapter *database.DcAdapter, cfg *config.Config, dbInject injector.DBInjector) {
+	handlersRegistry := handlers.NewHandlersRegistry(log, pool, dcAdapter, cfg, dbInject)
 
 	//---
 	// setup routing disini
 	//---
 
 	// > health probe routes
-	// In Fiber v3, healthcheck probes are registered as explicit routes instead
-	// of a single unified middleware. This allows each probe to have its own path
-	// and configuration. The RateLimiter middleware skips /live and /ready via its
-	// Next function so probes are never inadvertently throttled.
 	app.Get("/live", middleware.LivenessHandler())
-	app.Get("/ready", middleware.ReadinessHandler(registry))
 
 	// > swagger routes — only available in development / staging environments
-	if isDevelopment {
+	if cfg.IsDevelopment {
 		app.Use("/swagger*", swagger.ProxyPathMiddleware())
 		app.Get("/", func(c fiber.Ctx) error {
 			proxyPath := c.Get("X-Forwarded-Prefix", "")
@@ -44,7 +41,9 @@ func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool, registry *d
 			}
 			return c.Redirect().Status(fiber.StatusTemporaryRedirect).To("/swagger/index.html")
 		})
-		app.Get("/swagger/doc.json", handlers.GetSwaggerDocumentation)
+
+		app.Get("/swagger/doc.json", handlersRegistry.GetSwaggerDocumentation)
+
 		// Fiber v3 does not match "/swagger" (no trailing slash) against the
 		// "/swagger/" or "/swagger/*" routes. Add an explicit redirect so that
 		// browsers reaching /swagger are sent to the Swagger UI index page.
@@ -56,15 +55,18 @@ func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool, registry *d
 			}
 			return c.Redirect().Status(fiber.StatusMovedPermanently).To("/swagger/index.html")
 		})
-		app.Get("/swagger/", handlers.GetSwaggerUI)
-		app.Get("/swagger/*", handlers.GetSwaggerUI)
+		app.Get("/swagger/", handlersRegistry.GetSwaggerUI)
+		app.Get("/swagger/*", handlersRegistry.GetSwaggerUI)
 	}
 
-	app.Get("/ping", handlers.PingPongHandler)
+	app.Get("/ping", handlersRegistry.PingPongHandler)
 
 	// > user routes (example)
-	app.Post("/api/users", handlers.CreateUser)
-	app.Get("/api/users", handlers.GetUsers)
-	app.Put("/api/users/:user_name/password", handlers.UpdateUserPassword)
-	app.Delete("/api/users/:user_name", handlers.DeleteUser)
+	api := app.Group("/api", middleware.MultiDCMiddleware(log, cfg, dcAdapter))
+	{
+		api.Post("/users", handlersRegistry.CreateUser)
+		api.Get("/users", handlersRegistry.GetUsers)
+		api.Put("/users/:user_name/password", handlersRegistry.UpdateUserPassword)
+		api.Delete("/users/:user_name", handlersRegistry.DeleteUser)
+	}
 }

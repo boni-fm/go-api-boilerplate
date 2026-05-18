@@ -20,6 +20,15 @@ import (
 // @Failure 500 {object} fibererror.ResponseError "Internal server error"
 // @Router /api/users [post]
 func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
+	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
+			Code:    fiber.StatusInternalServerError,
+			Error:   "Internal Server Error",
+			Message: "Gagal initialize user service ...",
+		})
+	}
+
 	var req models.CreateUserRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
@@ -37,7 +46,7 @@ func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 		})
 	}
 
-	if err := hr.UserService.CreateUser(c.Context(), req.UserName, req.Password); err != nil {
+	if err := svc.CreateUser(c.Context(), req.UserName, req.Password); err != nil {
 		hr.log_.Errorf("Create user error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
@@ -60,11 +69,21 @@ func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 // @Tags users
 // @Accept json
 // @Produce json
+// @Param KodeDC query string true "KodeDC"
 // @Success 200 {object} models.UsersListResponse "Users retrieved successfully"
 // @Failure 500 {object} fibererror.ResponseError "Failed to fetch users"
 // @Router /api/users [get]
 func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
-	users, err := hr.UserService.GetUsers(c.Context())
+	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
+			Code:    fiber.StatusInternalServerError,
+			Error:   "Internal Server Error",
+			Message: "Gagal initialize user service ...",
+		})
+	}
+
+	users, err := svc.GetUsers(c.Context())
 	if err != nil {
 		hr.log_.Errorf("Get users error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
@@ -94,6 +113,15 @@ func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
 // @Failure 500 {object} fibererror.ResponseError "Failed to update password"
 // @Router /api/users/{user_name}/password [put]
 func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
+	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
+			Code:    fiber.StatusInternalServerError,
+			Error:   "Internal Server Error",
+			Message: "Gagal initialize user service ...",
+		})
+	}
+
 	userName := c.Params("user_name")
 
 	var req models.UpdateUserPasswordRequest
@@ -113,7 +141,7 @@ func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 		})
 	}
 
-	if err := hr.UserService.UpdateUserPassword(c.Context(), userName, req.NewPassword); err != nil {
+	if err := svc.UpdateUserPassword(c.Context(), userName, req.NewPassword); err != nil {
 		hr.log_.Errorf("Update password error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
@@ -140,9 +168,18 @@ func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 // @Failure 500 {object} fibererror.ResponseError "Failed to delete user"
 // @Router /api/users/{user_name} [delete]
 func (hr *HandlersRegistry) DeleteUser(c fiber.Ctx) error {
+	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
+			Code:    fiber.StatusInternalServerError,
+			Error:   "Internal Server Error",
+			Message: "Gagal initialize user service ...",
+		})
+	}
+
 	userName := c.Params("user_name")
 
-	if err := hr.UserService.DeleteUser(c.Context(), userName); err != nil {
+	if err := svc.DeleteUser(c.Context(), userName); err != nil {
 		hr.log_.Errorf("Delete user error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,

@@ -7,6 +7,7 @@ import (
 	"go-api-boilerplate/internal/database"
 	"go-api-boilerplate/internal/middleware"
 	"go-api-boilerplate/internal/utility/fibererror"
+	"go-api-boilerplate/internal/utility/injector"
 	"go-api-boilerplate/internal/utility/swagger"
 	"go-api-boilerplate/internal/worker"
 	"time"
@@ -41,10 +42,13 @@ type Server struct {
 	App            *fiber.App
 	Cfg            *config.Config
 	MiddlewareDeps *middleware.MiddlewareDependencies
-	// Pool is the shared bounded worker pool for background tasks.
+
+	// Worker pool, buat background process di service nya...
 	Pool *worker.Pool
-	// Registry holds the named database connections for multi-tenant routing.
-	Registry *database.Registry
+
+	// Database adapter untuk multidc/singledc
+	DcAdapter *database.DcAdapter
+	Injector  injector.DBInjector
 }
 
 func NewFiberConfig(cfg config.Config) *FiberConfig {
@@ -70,6 +74,10 @@ func NewServer(cfg config.Config, fiberCfg *FiberConfig) *Server {
 		// background processing. Without this flag, those values are backed
 		// by mutable fasthttp byte slices that are recycled after the handler
 		// returns, causing silent data corruption in background tasks.
+		//
+		// ⬆
+		// berdasarkan penjelasan AI begitu, simpelnya bair gk ada data corruption
+		// ketika ada context-derived value ke dalam workerpool di background
 		Immutable: true,
 
 		// Setup timeouts and body limits
@@ -90,10 +98,12 @@ func (s *Server) SetMiddlewareDeps(middlewareDeps *middleware.MiddlewareDependen
 	s.MiddlewareDeps = middlewareDeps
 }
 
-// SetRegistry stores the database registry so that middleware and routes can
-// resolve tenant-specific connections at request time.
-func (s *Server) SetRegistry(registry *database.Registry) {
-	s.Registry = registry
+func (s *Server) SetDbAdapter(adapter *database.DcAdapter) {
+	s.DcAdapter = adapter
+}
+
+func (s *Server) SetInjector(inject injector.DBInjector) {
+	s.Injector = inject
 }
 
 func (s *Server) Start() error {
@@ -101,8 +111,8 @@ func (s *Server) Start() error {
 	// handlers can dispatch tasks from the very first request.
 	s.Pool.Start(context.Background())
 
-	s.MiddlewareDeps.InitAllMiddleware(s.Registry)
-	router.SetupRoutes(s.MiddlewareDeps.Log, s.App, s.Pool, s.Registry, s.Cfg.IsDevelopment)
+	s.MiddlewareDeps.InitAllMiddleware()
+	router.SetupRoutes(s.MiddlewareDeps.Log, s.App, s.Pool, s.DcAdapter, s.Cfg, s.Injector)
 
 	if s.Cfg.IsDevelopment {
 		swagger.SwaggerSetup()

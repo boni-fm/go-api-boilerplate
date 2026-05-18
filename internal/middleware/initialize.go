@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"go-api-boilerplate/internal/database"
-
 	"github.com/boni-fm/go-libsd3/pkg/log"
 	"github.com/gofiber/fiber/v3"
 )
@@ -40,12 +38,12 @@ func NewMiddlewareDependencies(log *log.Logger, app *fiber.App, isDevelopment bo
 // (GET /live and GET /ready) in the router rather than as a middleware. The
 // RateLimiter skips these paths via its Next function to prevent probes from
 // being throttled.
-func (md *MiddlewareDependencies) InitAllMiddleware(registry *database.Registry) {
+func (md *MiddlewareDependencies) InitAllMiddleware() {
 	md.App.Use(
 		RequestIDMiddleware(),
 		LoggerMiddleware(md.Log.Logger),
 		RecoverMiddleware(md.Log),
-		MultiTenantMiddleware(registry),
+		//MultiDCMiddleware(md.Log, md.cfg, md.dbAdapter),
 		TimeoutMiddleware(defaultRequestTimeout),
 		FaviconMiddleware(),
 		RateLimiter(md.Log.Logger),
