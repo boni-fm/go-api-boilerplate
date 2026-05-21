@@ -1,7 +1,6 @@
 package injector
 
 import (
-	"context"
 	"fmt"
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/database"
@@ -13,7 +12,7 @@ import (
 )
 
 // DBInjector abstracts where *pgsd3.Database comes from.
-// Handler calls GetDB(c) — doesn't know if it's Static or Locals.
+// Handler calls GetDB(c) ...
 type DBInjector interface {
 	GetDB(c fiber.Ctx) (*pgsd3.Database, error)
 }
@@ -29,8 +28,8 @@ func NewStaticInjector(ta *database.DcAdapter, kodeDc string) *StaticInjector {
 	return &StaticInjector{ta: ta, kodeDc: kodeDc}
 }
 
-func (p *StaticInjector) GetDB(_ fiber.Ctx) (*pgsd3.Database, error) {
-	return p.ta.GetOrInit(context.Background(), p.kodeDc)
+func (p *StaticInjector) GetDB(c fiber.Ctx) (*pgsd3.Database, error) {
+	return p.ta.GetOrInit(c.Context(), p.kodeDc)
 }
 
 // ── LocalsInjector ────────────────────────────────────────────────

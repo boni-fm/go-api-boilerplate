@@ -45,7 +45,7 @@ func MultiDCMiddleware(logger *log.Logger, cfg *config.Config, dbAdapter *databa
 			logger.Warn("Gagal mengambil/initialize koneksi db " + kunciDc + " | ERR :: " + err.Error())
 			return fibererror.InternalServerError(
 				ctx,
-				"Gagal mengambil/initialize koneksi database untuk Kunci "+kunciDc+" | ERR: "+err.Error())
+				"Gagal mengambil/initialize koneksi database untuk Kunci "+kunciDc)
 		}
 
 		// taruh semua di local storage requestnya
