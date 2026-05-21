@@ -46,12 +46,15 @@ func NewLocalsInjector() *LocalsInjector {
 func (p *LocalsInjector) GetDB(c fiber.Ctx) (*pgsd3.Database, error) {
 	db, ok := c.Locals(p.localKey).(*pgsd3.Database)
 	if !ok || db == nil {
-		return nil, fmt.Errorf("no db in locals[%s] — is DBResolver registered?", p.localKey)
+		return nil, fmt.Errorf("no db in locals[%s] — DBResolver is not registered", p.localKey)
 	}
 	return db, nil
 }
 
-// ServiceFactory ~ biar dynamic gk init terus2an ...
+// ServiceFactory ~ biar dynamic, gk init terus2an ...
+// kalau mau inject baru lagi, bisa ditambahin disini ~
+//
+// WARN : tapi semua service disini harus direvisi dengan tambahan yg baru
 type ServiceFactory[S any] struct {
 	dbInjector  DBInjector
 	log         *logger.Logger
@@ -59,7 +62,12 @@ type ServiceFactory[S any] struct {
 	constructor func(*pgsd3.Database, *logger.Logger, *config.Config) *S // service constructor function
 }
 
-func NewServiceFactory[S any](p DBInjector, log *logger.Logger, cfg *config.Config, constructor func(db *pgsd3.Database, log_ *logger.Logger, cfg *config.Config) *S) *ServiceFactory[S] {
+func NewServiceFactory[S any](
+	p DBInjector,
+	log *logger.Logger,
+	cfg *config.Config,
+	constructor func(db *pgsd3.Database, log_ *logger.Logger, cfg *config.Config) *S,
+) *ServiceFactory[S] {
 	if p == nil {
 		panic("ServiceFactory: DBInjector must not be nil")
 	}

@@ -3,8 +3,8 @@ package middleware
 import (
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/database"
+	"go-api-boilerplate/internal/utility/fibererror"
 	"regexp"
-	"strconv"
 
 	pgsd3 "github.com/boni-fm/go-libsd3/pkg/db/postgres"
 	"github.com/boni-fm/go-libsd3/pkg/log"
@@ -35,23 +35,17 @@ func MultiDCMiddleware(logger *log.Logger, cfg *config.Config, dbAdapter *databa
 		kunciDc := resolveKunci(ctx)
 		if kunciDc == "" {
 			logger.Warn("kunci dc kosong ~~")
-			return ctx.JSON(
-				fiber.Map{
-					"status":    fiber.StatusBadRequest,
-					"isSuccess": false,
-					"message":   "Kunci tidak ditemukan; isi query param 'KodeDC', header 'X-kunci-dc', atau X-Forwarded-Prefix (contoh: /apixxxg001)",
-				})
+			return fibererror.BadRequestError(
+				ctx,
+				"Kunci tidak ditemukan; isi query param 'KodeDC', header 'X-kunci-dc', atau X-Forwarded-Prefix (contoh: /apixxxg001)")
 		}
 
 		db, err := dbAdapter.GetOrInit(ctx.Context(), kunciDc)
 		if err != nil {
 			logger.Warn("Gagal mengambil/initialize koneksi db " + kunciDc + " | ERR :: " + err.Error())
-			return ctx.JSON(
-				fiber.Map{
-					"status":    "gagal ambil koneksi db ~ " + strconv.FormatInt(fiber.StatusInternalServerError, 32),
-					"isSuccess": false,
-					"message":   "Gagal mengambil koneksi database untuk Kunci " + kunciDc + " | ERR: " + err.Error(),
-				})
+			return fibererror.InternalServerError(
+				ctx,
+				"Gagal mengambil/initialize koneksi database untuk Kunci "+kunciDc+" | ERR: "+err.Error())
 		}
 
 		// taruh semua di local storage requestnya

@@ -68,6 +68,9 @@ func main() {
 	// dan pastikan handler tidak menggunakan middleware multidc
 	// kalau ingin pakai fungsi diatas (kunci hardcode)
 	//
+	// static >> kunci dari appsettings.ini
+	// locals >> dari middleware multidc
+	//
 	// Inject ke seluruh penjuru repo
 	//dbInjector := injector.NewStaticInjector(dbManager, cfg.KodeDc) //jadi ditaro dalam memory ~
 
@@ -113,8 +116,10 @@ func main() {
 			log_.Errorf("Forced shutdown after timeout: %v", err)
 			os.Exit(1)
 		}
-		srv.Pool.Stop()
 
-		log_.Info("Server exited gracefully.")
+		srv.Pool.Stop()
+		dbManager.CloseAll()
+
+		log_.Info("Server meninggal dengan elegan ~~")
 	}
 }

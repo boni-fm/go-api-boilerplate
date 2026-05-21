@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/api/router"
 	"go-api-boilerplate/internal/database"
@@ -111,7 +112,9 @@ func (s *Server) Start() error {
 	// biar route API yang lebih spesifik tetap didahulukan
 	s.App.Get("/*", static.New("./static/public"))
 
-	return s.App.Listen(":"+s.Cfg.Port, fiber.ListenConfig{
-		DisableStartupMessage: false,
-	})
+	return s.App.Listen(
+		fmt.Sprintf(":%d", s.Cfg.Port),
+		fiber.ListenConfig{
+			DisableStartupMessage: false,
+		})
 }

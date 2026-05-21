@@ -10,7 +10,7 @@ type Config struct {
 	AppName       string
 	IsDevelopment bool
 	Kunci         string
-	Port          string
+	Port          int
 
 	Timezone string
 }
@@ -29,7 +29,7 @@ func LoadConfigIniFromPath(path string) Config {
 		AppName:       cfg.Section("CONFIG").Key("AppName").MustString("GoAPIBoilerplate"),
 		IsDevelopment: cfg.Section("CONFIG").Key("IsDevelopment").MustBool(false),
 		Kunci:         cfg.Section("CONFIG").Key("Kunci").String(),
-		Port:          cfg.Section("CONFIG").Key("Port").MustString("8080"),
+		Port:          cfg.Section("CONFIG").Key("Port").MustInt(8080),
 		Timezone:      cfg.Section("CONFIG").Key("Timezone").MustString("Asia/Jakarta"),
 	}
 }

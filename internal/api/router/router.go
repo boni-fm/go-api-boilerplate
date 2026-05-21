@@ -29,6 +29,7 @@ func SetupRoutes(log *log.Logger, app *fiber.App, pool *worker.Pool, dcAdapter *
 
 	// > health probe routes
 	app.Get("/live", middleware.LivenessHandler())
+	app.Get("/ready", middleware.ReadinessHandler(dcAdapter))
 
 	// > swagger routes — only available in development / staging environments
 	if cfg.IsDevelopment {

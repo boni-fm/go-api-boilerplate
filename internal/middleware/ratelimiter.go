@@ -15,10 +15,10 @@ import (
 // Path /live di-skip biar probe Kubernetes gak kena throttle.
 func RateLimiter(log *logrus.Logger) fiber.Handler {
 	return limiter.New(limiter.Config{
-		// skip /live biar health probe gak kena rate limit
+		// skip /live dan /ready biar health probe gak kena rate limit ~
 		Next: func(c fiber.Ctx) bool {
 			p := c.Path()
-			return p == "/live"
+			return p == "/live" || p == "/ready"
 		},
 		Max:        100,
 		Expiration: 1 * time.Minute,
