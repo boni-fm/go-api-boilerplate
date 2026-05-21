@@ -1,4 +1,3 @@
-// Package middleware contains all Fiber middleware registrations.
 package middleware
 
 import (
@@ -9,17 +8,9 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
-// RecoverMiddleware returns Fiber's battle-tested built-in recovery middleware.
-// It catches any panic raised inside a downstream handler or middleware,
-// logs the stack trace via the application logger, and then delegates to the
-// application's GlobalErrorHandler so the response uses the standard
-// ResponseError envelope instead of a custom ad-hoc shape.
-//
-// Why replace the custom defer-based implementation?
-//   - The old custom recover wrote the error response inside a defer and silently
-//     discarded write errors ("_ = c.Status(…).JSON(…)").
-//   - It bypassed GlobalErrorHandler, producing a fiber.Map instead of ResponseError.
-//   - It had no stack-trace capture, making panic root-cause analysis impossible.
+// RecoverMiddleware nangkep panic dari handler atau middleware di bawahnya,
+// log stack trace-nya, terus delegasiin ke GlobalErrorHandler
+// biar response-nya tetap pakai format ResponseError yang konsisten.
 func RecoverMiddleware(log *log.Logger) fiber.Handler {
 	return recover.New(recover.Config{
 		EnableStackTrace: true,

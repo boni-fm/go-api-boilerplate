@@ -61,8 +61,6 @@ func readLinuxLocaltimeSymlink() string {
 		return ""
 	}
 
-	// The symlink typically points to something like:
-	// /usr/share/zoneinfo/Asia/Jakarta
 	parts := strings.SplitN(symlinkTarget, "zoneinfo/", 2)
 	if len(parts) < 2 {
 		return ""

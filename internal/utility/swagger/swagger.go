@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 )
 
+// SwaggerSetup jalanin swag init buat generate/update docs swagger
+// kalau swag CLI gak ketemu, kasih tau cara installnya
 func SwaggerSetup() {
 	cwd, err := os.Getwd()
 	if err == nil {
 		if _, err := exec.LookPath("swag"); err != nil {
-			fmt.Printf("[swagger] swag CLI not found.  Install with: go install github.com/swaggo/swag/cmd/swag@latest")
+			fmt.Printf("[swagger] swag CLI gak ketemu. Install dulu: go install github.com/swaggo/swag/cmd/swag@latest")
 		} else {
 			var out bytes.Buffer
 			cmd := exec.Command("swag", "init", "-g", "main.go", "-o", "docs")
@@ -20,12 +22,13 @@ func SwaggerSetup() {
 			cmd.Stdout = &out
 			cmd.Stderr = &out
 			if err := cmd.Run(); err != nil {
-				fmt.Printf("[swagger] swag init failed: %v\n%s", err, out.String())
+				fmt.Printf("[swagger] swag init gagal: %v\n%s", err, out.String())
 			}
 		}
 	}
 }
 
+// GetDocPath kembaliin path lengkap ke file swagger.json
 func GetDocPath() string {
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, "docs", "swagger.json")

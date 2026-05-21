@@ -1,7 +1,3 @@
-// config/initialize.go
-// Package config handles loading and parsing application configuration from
-// the appsettings.ini file. Exposing LoadConfigIniFromPath allows callers
-// (including tests) to load configuration from any INI file path.
 package config
 
 import (
@@ -10,29 +6,19 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// Config holds all application configuration values loaded from appsettings.ini.
 type Config struct {
 	AppName       string
 	IsDevelopment bool
 	Kunci         string
 	Port          string
 
-	// Timezone is an IANA timezone name (e.g. "Asia/Jakarta"). When set,
-	// time.Local is overridden at startup so that time.Now() returns the
-	// correct localized time across the entire process.
 	Timezone string
 }
 
-// LoadConfigIni loads configuration from the default "appsettings.ini" file
-// located in the current working directory.
 func LoadConfigIni() Config {
 	return LoadConfigIniFromPath("appsettings.ini")
 }
 
-// LoadConfigIniFromPath loads and parses configuration from the INI file at
-// the given path. It is the primary implementation used by LoadConfigIni and
-// can be called directly in tests with a temporary file path.
-// The process is terminated via log.Fatalf if the file cannot be read.
 func LoadConfigIniFromPath(path string) Config {
 	cfg, err := ini.Load(path)
 	if err != nil {

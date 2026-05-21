@@ -1,28 +1,25 @@
-// Package worker provides a bounded background worker pool.
+// Package worker itu worker pool yang bisa nampung job background.
 //
-// The pool holds a fixed number of goroutines (workers) and accepts
-// background [Job]s through a bounded channel (capacity). When the channel is
-// full, [Pool.Submit] sheds the incoming job immediately (returns false)
-// instead of blocking, giving callers explicit backpressure signals at high
-// throughput.
+// Dia punya sejumlah goroutine yang kerja paralel, dan queue buat nampung job.
+// Kalau queue udah penuh, job langsung dibuang (return false) — gak nge-block.
 //
-// # Lifecycle
+// # Cara pakai
 //
-//	pool := worker.New(4, 128)    // 4 workers, 128-job buffer
-//	pool.Start(ctx)               // launch goroutines (once at startup)
+//	pool := worker.New(4, 128)    // 4 worker, buffer 128 job
+//	pool.Start(ctx)               // jalanin goroutine-nya
 //	...
-//	pool.Stop()                   // drain queue, shut down gracefully
+//	pool.Stop()                   // drain queue, terus mati dengan elegan
 //
-// # Usage in handlers
+// # Contoh di handler
 //
 //	ok := pool.Submit(func(ctx context.Context) {
-//	    // fire-and-forget: audit log, metric flush, email dispatch, etc.
+//	    // fire-and-forget: audit log, flush metrik, kirim email, dll
 //	    if err := sendAuditEvent(ctx, event); err != nil {
 //	        log.Errorf("audit: %v", err)
 //	    }
 //	})
 //	if !ok {
-//	    log.Warn("worker pool saturated — audit event dropped")
+//	    log.Warn("worker pool penuh — job dibuang")
 //	}
 package worker
 
@@ -32,26 +29,25 @@ import (
 	"sync/atomic"
 )
 
-// Job is a unit of work executed by the pool.
-// The context carries the pool's shutdown signal; long-running jobs should
-// honour ctx.Done() so they can exit cleanly during graceful shutdown.
+// Job adalah satu unit kerjaan yang dijalankan sama pool.
+// Context-nya bawa sinyal shutdown — job yang lama-lama sebaiknya cek ctx.Done()
+// biar bisa berhenti dengan bersih pas shutdown.
 type Job func(ctx context.Context)
 
-// Pool dispatches submitted jobs to a fixed set of worker goroutines.
-// The zero value is not usable; create instances with [New].
+// Pool nyimpen dan ngedistribusiin job ke goroutine-goroutine yang udah siap kerja.
+// Jangan pakai zero value — bikin lewat [New] aja.
 type Pool struct {
 	workers int
 	jobs    chan Job
 
-	// cancel is set by Start; calling it cancels the context propagated to
-	// every running job, enabling cooperative shutdown.
+	// cancel dipasang pas Start dipanggil — buat cancel context yang dikasih ke tiap job.
 	cancel context.CancelFunc
 
 	wg   sync.WaitGroup
-	once sync.Once // makes Stop idempotent
+	once sync.Once // biar Stop bisa dipanggil berkali-kali tanpa meledak
 
-	// mu guards the closed flag together with the channel-send in Submit so
-	// that Submit can never race against Stop's close(p.jobs).
+	// mu jaga flag closed + pengiriman ke channel di Submit,
+	// supaya Submit gak balapan sama close(p.jobs) di Stop.
 	mu     sync.Mutex
 	closed bool
 
@@ -59,14 +55,12 @@ type Pool struct {
 	dropped   atomic.Int64
 }
 
-// New creates a new Pool with the given number of worker goroutines and
-// job-queue capacity.
+// New bikin Pool baru.
 //
-//   - workers:  number of concurrent goroutines; clamped to a minimum of 1.
-//   - capacity: maximum number of queued (not-yet-executing) jobs; clamped to
-//     a minimum of 1.
+//   - workers:  jumlah goroutine — minimal 1.
+//   - capacity: kapasitas queue — minimal 1.
 //
-// Call [Pool.Start] once before submitting any jobs.
+// Panggil [Pool.Start] dulu sebelum submit job apapun.
 func New(workers, capacity int) *Pool {
 	if workers < 1 {
 		workers = 1
@@ -80,13 +74,11 @@ func New(workers, capacity int) *Pool {
 	}
 }
 
-// Start launches the worker goroutines. It must be called exactly once before
-// any [Pool.Submit] calls.
+// Start jalanin goroutine-goroutine worker-nya. Dipanggil sekali aja pas startup.
 //
-// The provided context is used as the parent for the pool's internal
-// cancellation context, which is forwarded to every running [Job]. Callers
-// should prefer passing [context.Background] here; shutdown is coordinated
-// through [Pool.Stop], not by cancelling this parent context.
+// Context yang dikasih jadi parent buat context internal pool,
+// yang nantinya diterusin ke tiap Job. Lebih baik kasih context.Background() di sini;
+// urusan shutdown dihandle lewat [Pool.Stop].
 func (p *Pool) Start(ctx context.Context) {
 	ctx, p.cancel = context.WithCancel(ctx)
 	for i := 0; i < p.workers; i++ {
@@ -95,7 +87,7 @@ func (p *Pool) Start(ctx context.Context) {
 	}
 }
 
-// work is the goroutine body: drain the jobs channel until it is closed.
+// work itu isi goroutine-nya: terus ambil job dari channel sampai ditutup.
 func (p *Pool) work(ctx context.Context) {
 	defer p.wg.Done()
 	for job := range p.jobs {
@@ -104,11 +96,10 @@ func (p *Pool) work(ctx context.Context) {
 	}
 }
 
-// Submit enqueues a job for asynchronous execution. It is non-blocking:
-//   - Returns true  — job was enqueued successfully.
-//   - Returns false — job was dropped because the queue is full or [Pool.Stop]
-//     has already been called. In either case the drop counter is incremented
-//     so operators can alert on load shedding via [Pool.Stats].
+// Submit masukin job ke antrian. Non-blocking:
+//   - Return true  — job berhasil masuk antrian.
+//   - Return false — job dibuang karena antrian penuh atau pool udah di-Stop.
+//     Keduanya nambah counter dropped buat monitoring.
 func (p *Pool) Submit(job Job) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -126,32 +117,28 @@ func (p *Pool) Submit(job Job) bool {
 	}
 }
 
-// Stop signals workers to finish draining the existing queue and then exit.
-// In-flight jobs receive a cancelled context so that they can exit early if
-// they check ctx.Done(). Queued-but-not-yet-started jobs will likewise see
-// the cancelled context — if a job needs to survive shutdown (e.g. a final
-// audit-log flush), it should create its own context internally.
+// Stop minta worker buat beresin sisa antrian terus berhenti.
+// Job yang lagi jalan dapet context yang di-cancel sebagai tanda saatnya cabut.
+// Job yang udah antri tapi belum jalan juga kena cancel context-nya —
+// kalau job butuh tetap hidup pas shutdown, bikin context sendiri aja di dalamnya.
 //
-// Stop blocks until every worker goroutine has returned. It is safe to call
-// multiple times (idempotent).
+// Stop ngeblock sampe semua goroutine beres. Aman dipanggil berkali-kali.
 func (p *Pool) Stop() {
 	p.once.Do(func() {
 		p.mu.Lock()
 		p.closed = true
 		if p.cancel != nil {
-			// Signal running jobs that shutdown is in progress.
-			p.cancel()
+			p.cancel() // kasih tau job yang lagi jalan: waktunya shutdown
 		}
-		close(p.jobs) // signal workers to drain and exit
+		close(p.jobs) // kasih tau worker buat drain terus keluar
 		p.mu.Unlock()
 
-		p.wg.Wait() // block until all goroutines have returned
+		p.wg.Wait() // tunggu sampe semua goroutine beneran beres
 	})
 }
 
-// Stats returns the cumulative count of jobs processed and dropped since
-// [Pool.Start] was called. These counters are suitable for exposing as
-// operational metrics or health-check fields.
+// Stats balikin total job yang berhasil diproses dan yang dibuang
+// sejak Start dipanggil. Cocok buat metrik atau health check.
 func (p *Pool) Stats() (processed, dropped int64) {
 	return p.processed.Load(), p.dropped.Load()
 }

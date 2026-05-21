@@ -17,6 +17,19 @@ import (
 	"github.com/boni-fm/go-libsd3/pkg/log"
 )
 
+// @title           Go Api ~
+// @version         1.x.x
+// @description     ~
+
+// @contact.name   Department IT SD 3
+// @contact.email  sd3@indomaret.co.id
+
+// // // Ini comment untuk naro token di header
+// // // jadi, token auth nya gk ditaro didalam query param ...
+// //@securityDefinitions.apikey  BearerAuth
+// //@in                          header
+// //@name                        Authorization
+// //@description                 Enter your bearer token in the format: Bearer {token}
 func main() {
 	/*
 		INITIALIZE AWAL APLIKASI
@@ -80,9 +93,6 @@ func main() {
 		|______/   |__/          \______/ |_______/        \______/ 
 	`)
 
-	// Graceful shutdown: listen for SIGTERM / SIGINT in the background while
-	// the server runs. When a signal arrives the server is given 10 seconds to
-	// finish in-flight requests before the process exits.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 
@@ -99,13 +109,10 @@ func main() {
 		}
 	case sig := <-quit:
 		log_.Infof("Received signal %v — initiating graceful shutdown...", sig)
-		// 1. Stop accepting new HTTP connections and let in-flight requests
-		//    finish (they may still submit background jobs to the pool).
 		if err := srv.App.ShutdownWithTimeout(10 * time.Second); err != nil {
 			log_.Errorf("Forced shutdown after timeout: %v", err)
 			os.Exit(1)
 		}
-		// 2. Drain the worker pool so no background tasks are abandoned.
 		srv.Pool.Stop()
 
 		log_.Info("Server exited gracefully.")

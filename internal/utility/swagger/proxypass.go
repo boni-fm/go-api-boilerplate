@@ -7,7 +7,7 @@ const (
 	LocalsProxyPath       = "proxyPath"
 )
 
-// ProxyPathMiddleware extracts and stores the proxy path from headers
+// ProxyPathMiddleware ambil proxy path dari header terus simpen ke locals
 func ProxyPathMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		proxyPath := c.Get(HeaderForwardedPrefix, "")
@@ -18,7 +18,7 @@ func ProxyPathMiddleware() fiber.Handler {
 	}
 }
 
-// GetProxyPath retrieves the proxy path from context locals
+// GetProxyPath ambil proxy path dari locals
 func GetProxyPath(c fiber.Ctx) string {
 	if proxyPath := c.Locals(LocalsProxyPath); proxyPath != nil {
 		if path, ok := proxyPath.(string); ok {

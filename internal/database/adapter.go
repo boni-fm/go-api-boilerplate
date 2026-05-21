@@ -17,24 +17,17 @@ import (
 // ─────────────────────────────────────────────────────────────────
 
 type AdapterConfig struct {
-	MaxDc            int           // LRU cap: max live tenant pool entries
-	IdleTTL          time.Duration // TTL: evict entry idle longer than this
+	MaxDc            int           // maks jumlah tenant aktif di LRU
+	IdleTTL          time.Duration // berapa lama idle sebelum di-evict
 	EvictionInterval time.Duration
 }
 
 func DefaultAdapterConfig() AdapterConfig {
 	return AdapterConfig{
-		MaxDc:   15,
-		IdleTTL: 20 * time.Minute,
+		MaxDc:            15,
+		IdleTTL:          20 * time.Minute,
+		EvictionInterval: 5 * time.Minute,
 	}
-}
-
-// registryKey builds the map key as "KodeDC:AppName".
-// This ensures the same KodeDC used by two different AppNames
-// gets two separate pool entries with correct application_name
-// visible in pg_stat_activity.
-func registryKey(kodeDc, appName string) string {
-	return kodeDc + ":" + appName
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -44,19 +37,18 @@ func registryKey(kodeDc, appName string) string {
 type DcAdapter struct {
 	mu sync.Mutex
 
-	// sf deduplicates concurrent init calls for the same key.
-	// Group is safe for concurrent use with no initialization needed.
+	// sf deduplikasi concurrent init buat key yang sama.
 	sf singleflight.Group
 
-	// cache is the LRU+TTL store.
+	// cache adalah LRU+TTL store.
 	// Key:   kodeDC string
 	// Value: *pgsd3.Database
 	//
-	// expirable.LRU handles:
-	//   - LRU eviction when size > MaxDc
-	//   - TTL eviction when entry idle > IdleTTL
-	//   - OnEvict callback to close the DB cleanly
-	//   - thread-safe get/set/evict internally
+	// expirable.LRU handle:
+	//   - evict LRU kalau size > MaxDc
+	//   - evict TTL kalau idle > IdleTTL
+	//   - callback OnEvict buat nutup DB yang keluarkan
+	//   - thread-safe secara internal
 	cache *lru.LRU[string, *pgsd3.Database]
 
 	cm  *pgsd3.ConnectionManager
@@ -84,19 +76,16 @@ func GetDcAdapterWithCustomConfig(
 			appName: appName,
 		}
 
-		// OnEvict fires when an entry is removed for ANY reason:
-		//   - LRU cap exceeded     (size > MaxDc)
-		//   - TTL expired          (idle > IdleTTL)
-		//   - manual Remove() call
-		//   - cache.Purge()
+		// onEvict dipanggil tiap ada entry yang keluar — entah karena:
+		//   - LRU penuh (size > MaxDc)
+		//   - TTL habis (idle > IdleTTL)
+		//   - dipanggil manual Remove() atau Purge()
 		//
-		// We close the connection through the pool so it is removed from
-		// ConnectionPool.connections too. This is important: pool.Connect's
-		// fast path checks cp.connections, so removing the entry there ensures
-		// the next GetOrInit triggers a fresh NewDatabase() call.
+		// Nutup koneksi lewat pool biar entry-nya juga ilang dari ConnectionPool.
+		// Ini penting supaya Connect() fast path gak balik pointer yang udah mati.
 		onEvict := func(key string, db *pgsd3.Database) {
 			_ = pgsd3.GetConnectionPool().CloseConnection(key)
-			fmt.Printf("🗑️  Evicted [%s] (LRU or TTL)\n", key)
+			log.Infof("Evicted [%s] (LRU or TTL)", key)
 		}
 
 		a.cache = lru.NewLRU[string, *pgsd3.Database](
@@ -124,7 +113,7 @@ func GetDcAdapter(
 
 		onEvict := func(key string, db *pgsd3.Database) {
 			_ = pgsd3.GetConnectionPool().CloseConnection(key)
-			fmt.Printf("🗑️  Evicted [%s] (LRU or TTL)\n", key)
+			log.Infof("Evicted [%s] (LRU or TTL)", key)
 		}
 
 		a.cache = lru.NewLRU[string, *pgsd3.Database](
@@ -145,36 +134,32 @@ func (a *DcAdapter) DefaultDbConfig(kodeDc string) pgsd3.Config {
 	}
 }
 
-// GetOrInit is the hot path.
+// GetOrInit adalah hot path buat dapetin koneksi DB.
 //
-// Flow:
-//  1. check cache — hit with a live connection = return instantly
-//  2. miss (or stale closed connection) = singleflight.Do(key, connectFn)
-//     - first goroutine runs connectFn
-//     - all concurrent goroutines for same key wait and share the result
-//     - if connectFn errors → all get the error, next call retries fresh
-//  3. on success = store in cache (starts LRU + TTL clock)
+// Alurnya:
+//  1. cek cache — kalau ada dan masih hidup, langsung return
+//  2. miss atau koneksi mati → singleflight.Do(key, connectFn)
+//     - goroutine pertama jalanin connectFn
+//     - goroutine lain yang minta key sama nunggu dan numpang hasil yang sama
+//     - kalau connectFn error → semua dapat error, request berikutnya retry fresh
+//  3. sukses → simpen ke cache (mulai clock LRU + TTL)
 func (a *DcAdapter) GetOrInit(ctx context.Context, kodeDc string) (*pgsd3.Database, error) {
-	// Fast path: cache hit — only return if the connection is still alive.
-	// We must check IsClosed() because an eviction callback may have already
-	// called db.Close() on this pointer while it was still in the cache
-	// (race between TTL background goroutine and an incoming request).
+	// Fast path: cache hit — cek dulu IsClosed() biar gak balik koneksi mati.
+	// Bisa terjadi race antara TTL eviction goroutine dan request yang masuk.
 	if db, ok := a.cache.Get(kodeDc); ok {
 		if !db.IsClosed() {
 			return db, nil
 		}
-		// Stale entry: evict it so the slow path creates a fresh connection.
-		a.cache.Remove(kodeDc) // triggers onEvict → removes from ConnectionPool too
+		// Entry udah mati, buang — slow path bakal bikin koneksi baru.
+		a.cache.Remove(kodeDc) // trigger onEvict → hapus dari ConnectionPool juga
 	}
 
-	// Slow path: cache miss — deduplicate with singleflight
+	// Slow path: cache miss — deduplikasi pakai singleflight
 	result, err, _ := a.sf.Do(kodeDc, func() (interface{}, error) {
-		// Register config into go-libsd3 — protected by mu
-		// to prevent duplicate-key panic if two goroutines
-		// race here for different keys simultaneously.
-		// The error is intentionally ignored: RegisterConfig returns an error
-		// if the config already exists, which is fine — it means a previous
-		// successful registration is still in place.
+		// Daftarin config ke go-libsd3
+		// supaya gak ada panic duplicate-key kalau dua goroutine
+		// race buat key yang berbeda sekaligus.
+		// Error diabaikan: RegisterConfig error kalau key udah ada — it's fine.
 		a.mu.Lock()
 		_ = pgsd3.GetConnectionPool().RegisterConfig(
 			kodeDc,
@@ -182,18 +167,18 @@ func (a *DcAdapter) GetOrInit(ctx context.Context, kodeDc string) (*pgsd3.Databa
 		)
 		a.mu.Unlock()
 
-		// Connect — this is the expensive operation.
-		// pool.Connect handles the case where the config exists but the
-		// connection was previously closed (creates a fresh *Database).
+		// Connect, connect, connect ...
+		// pool.Connect handle kasus di mana config udah ada tapi koneksinya mati.
 		db, err := a.cm.GetDB(ctx, kodeDc)
 		if err != nil {
+			a.log.Errorf("Failed to connect [%s]: %v", kodeDc, err)
 			return nil, fmt.Errorf("[%s] connect failed: %w", kodeDc, err)
 		}
 
-		// Store in cache INSIDE the singleflight fn so concurrent waiters
-		// that call cache.Get() after this returns will find it immediately.
+		// Simpen ke cache didalam singleflight fn supaya goroutine lain
+		// yang nunggu langsung bisa nemu di cache setelah ini return.
 		a.cache.Add(kodeDc, db)
-		fmt.Printf("✅ Connected [%s]\n", kodeDc)
+		a.log.Infof("Connected [%s]", kodeDc)
 		return db, nil
 	})
 	if err != nil {
@@ -203,21 +188,20 @@ func (a *DcAdapter) GetOrInit(ctx context.Context, kodeDc string) (*pgsd3.Databa
 	return result.(*pgsd3.Database), nil
 }
 
-// PreConnect connects at startup for known high-traffic KodeDCs.
-// Call in main.go so the pool is warm before the first real request.
+// PreConnect konek di awal startup buat KodeDC yang udah ketebak bakal rame.
+// Dipanggil di main.go biar pool udah warm sebelum request pertama masuk.
 func (a *DcAdapter) PreConnect(ctx context.Context, kodeDc string) error {
 	_, err := a.GetOrInit(ctx, kodeDc)
 	return err
 }
 
-// Reset clears a failed or stale entry — next GetOrInit() retries.
-func (a *DcAdapter) Reset(kodeDc, appName string) {
-	key := registryKey(kodeDc, appName)
-	a.cache.Remove(key) // triggers OnEvict → CloseConnection
-	fmt.Printf("🔄 Reset [%s] — will reconnect on next request\n", key)
+// Reset buang entry yang gagal atau stale — GetOrInit() berikutnya bakal retry.
+func (a *DcAdapter) Reset(kodeDc string) {
+	a.cache.Remove(kodeDc) // trigger OnEvict → CloseConnection
+	a.log.Infof("Reset KodeDC [%s]", kodeDc)
 }
 
-// Stats returns live pool stats from go-libsd3 for all active entries.
+// Stats ngambil statistik pool dari go-libsd3 buat semua entry yang aktif.
 func (a *DcAdapter) Stats(ctx context.Context) map[string]interface{} {
 	result := make(map[string]interface{})
 	for _, key := range a.cache.Keys() {
@@ -231,15 +215,15 @@ func (a *DcAdapter) Stats(ctx context.Context) map[string]interface{} {
 	return result
 }
 
-// HealthCheck delegates to go-libsd3's HealthCheckAll.
+// HealthCheck delegasi ke go-libsd3's HealthCheckAll.
 func (a *DcAdapter) HealthCheck(ctx context.Context) map[string]error {
 	return a.cm.HealthCheck(ctx)
 }
 
-// CloseAll graceful shutdown — closes every cached connection.
+// CloseAll graceful shutdown — nutup semua koneksi yang ada di cache.
+// Purge() manggil OnEvict tiap entry → CloseConnection masing-masing.
 func (a *DcAdapter) CloseAll() {
-	// Purge() calls OnEvict for every entry → CloseConnection for each.
 	a.cache.Purge()
 	_ = a.cm.CloseAllConnections()
-	fmt.Println("🔌 All connections closed")
+	a.log.Infof("Database [%s] closed", a.appName)
 }

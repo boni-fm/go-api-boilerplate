@@ -52,7 +52,12 @@ definitions:
         type: boolean
     type: object
 info:
-  contact: {}
+  contact:
+    email: sd3@indomaret.co.id
+    name: Department IT SD 3
+  description: "~"
+  title: Go Api ~
+  version: 1.x.x
 paths:
   /api/users:
     get:

@@ -1,7 +1,13 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "~",
+        "title": "Go Api ~",
+        "contact": {
+            "name": "Department IT SD 3",
+            "email": "sd3@indomaret.co.id"
+        },
+        "version": "1.x.x"
     },
     "paths": {
         "/api/users": {

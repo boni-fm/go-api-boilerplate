@@ -10,21 +10,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// RateLimiter returns a Fiber middleware that limits each IP to 100 requests
-// per minute. When the limit is exceeded it responds with HTTP 429 using the
-// standard ResponseError envelope so clients receive a consistent error shape.
-//
-// Health-check paths (/live, /ready) are excluded so that Kubernetes probes
-// are never inadvertently rate-limited, regardless of probe frequency.
+// RateLimiter batasi tiap IP maksimal 100 request per menit.
+// Kalau limit kelewat, balik HTTP 429 pakai ResponseError biar formatnya konsisten.
+// Path /live di-skip biar probe Kubernetes gak kena throttle.
 func RateLimiter(log *logrus.Logger) fiber.Handler {
 	return limiter.New(limiter.Config{
-		// Skip rate limiting for health probes so Kubernetes probes are never
-		// inadvertently throttled. In Fiber v3, health checks are registered
-		// as routes rather than middleware, so they pass through the full
-		// middleware stack — this guard ensures they remain unaffected.
+		// skip /live biar health probe gak kena rate limit
 		Next: func(c fiber.Ctx) bool {
 			p := c.Path()
-			return p == "/live" || p == "/ready"
+			return p == "/live"
 		},
 		Max:        100,
 		Expiration: 1 * time.Minute,

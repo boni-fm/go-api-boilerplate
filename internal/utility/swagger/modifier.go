@@ -7,50 +7,44 @@ import (
 	"strings"
 )
 
-// DocumentModifier handles swagger document modifications
+// DocumentModifier ngurusin modifikasi dokumen swagger
 type DocumentModifier struct {
 	docPath string
 }
 
-// NewDocumentModifier creates a new DocumentModifier that reads from the
-// default docs/swagger.json location relative to the current working directory.
+// NewDocumentModifier bikin DocumentModifier baru, baca dari docs/swagger.json
 func NewDocumentModifier() *DocumentModifier {
 	return &DocumentModifier{
 		docPath: GetDocPath(),
 	}
 }
 
-// NewDocumentModifierWithPath creates a DocumentModifier that reads from the
-// specified path. Use this in tests to avoid a dependency on the generated
-// swagger.json file in the project's docs/ directory.
+// NewDocumentModifierWithPath bikin DocumentModifier dengan path custom —
+// berguna buat testing biar gak bergantung sama file swagger.json asli
 func NewDocumentModifierWithPath(docPath string) *DocumentModifier {
 	return &DocumentModifier{docPath: docPath}
 }
 
-// GetModifiedDocument reads and modifies swagger document based on proxy configuration
+// GetModifiedDocument baca swagger doc terus modif sesuai proxy config
 func (dm *DocumentModifier) GetModifiedDocument(proxyPath string) (map[string]interface{}, error) {
-	// Read swagger file
 	doc, err := dm.readSwaggerDoc()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read swagger doc: %w", err)
+		return nil, fmt.Errorf("gagal baca swagger doc: %w", err)
 	}
 
-	// Apply server modifications
-	servers := dm.buildServers(proxyPath)
-	doc["servers"] = servers
+	doc["servers"] = dm.buildServers(proxyPath)
 
-	// For Swagger 2.0 compatibility - modify basePath
+	// Swagger 2.0 compat — set basePath kalau ada proxy
 	if proxyPath != "" {
 		normalizedPath := normalizeProxyPath(proxyPath)
 		doc["basePath"] = normalizedPath
-		// Remove host when using proxy
-		delete(doc, "host")
+		delete(doc, "host") // hapus host kalau pakai proxy
 	}
 
 	return doc, nil
 }
 
-// readSwaggerDoc reads and parses the swagger.json file
+// readSwaggerDoc baca dan parse file swagger.json
 func (dm *DocumentModifier) readSwaggerDoc() (map[string]interface{}, error) {
 	fileContent, err := os.ReadFile(dm.docPath)
 	if err != nil {
@@ -65,27 +59,22 @@ func (dm *DocumentModifier) readSwaggerDoc() (map[string]interface{}, error) {
 	return doc, nil
 }
 
-// buildServers constructs the servers array based on proxy path
+// buildServers bangun array servers berdasarkan proxy path
 func (dm *DocumentModifier) buildServers(proxyPath string) []map[string]interface{} {
 	servers := []map[string]interface{}{}
 
 	if proxyPath != "" {
-		// Normalize proxy path
 		normalizedPath := normalizeProxyPath(proxyPath)
-
-		// Add proxy server first (this will be the default)
+		// proxy path duluan biar jadi default
 		servers = append(servers, map[string]interface{}{
 			"url":         normalizedPath,
 			"description": "Reverse Proxy Path",
 		})
-
-		// Add root server as alternative
 		servers = append(servers, map[string]interface{}{
 			"url":         "/",
 			"description": "Root Url Server",
 		})
 	} else {
-		// No proxy, just root server
 		servers = append(servers, map[string]interface{}{
 			"url":         "/",
 			"description": "Root Url Server",
@@ -95,7 +84,7 @@ func (dm *DocumentModifier) buildServers(proxyPath string) []map[string]interfac
 	return servers
 }
 
-// normalizeProxyPath ensures the proxy path starts with / or http
+// normalizeProxyPath mastiin proxy path diawali / atau http
 func normalizeProxyPath(path string) string {
 	path = strings.TrimSpace(path)
 
@@ -108,11 +97,8 @@ func normalizeProxyPath(path string) string {
 	}
 
 	if !strings.HasPrefix(path, "/") {
-		return "/" + path
+		path = "/" + path
 	}
 
-	// Remove trailing slash
-	path = strings.TrimSuffix(path, "/")
-
-	return path
+	return strings.TrimSuffix(path, "/")
 }

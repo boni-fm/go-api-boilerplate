@@ -16,13 +16,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/static"
 )
 
-// defaultWorkerCount is the number of goroutines in the background worker pool.
-// Teams should tune this value based on their service's background-task volume.
+// jumlah goroutine buat worker pool background — tuning sesuai kebutuhan service
 const defaultWorkerCount = 4
 
-// defaultWorkerCapacity is the maximum number of jobs that can queue up in the
-// worker pool before new submissions are shed (dropped). 128 gives ~10 ms of
-// buffer at 10 k tasks/sec without materialising as a memory concern.
+// kapasitas queue worker pool — kalau penuh, job baru langsung dibuang (shed)
 const defaultWorkerCapacity = 128
 
 type FiberConfig struct {
@@ -35,18 +32,18 @@ type FiberConfig struct {
 	BodyLimit     int
 }
 
-// Server owns the Fiber application, its configuration, the middleware
-// dependency graph, the background worker pool, and the database registry.
-// All fields should be treated as read-only after Start is called.
+// Server itu induknya — nyimpen app Fiber, config, middleware, worker pool, sama koneksi db.
+// Setelah Start dipanggil, field-field di sini jangan diubah-ubah lagi.
+// Kalau diubah, resiko ditanggung sendiri ~
 type Server struct {
 	App            *fiber.App
 	Cfg            *config.Config
 	MiddlewareDeps *middleware.MiddlewareDependencies
 
-	// Worker pool, buat background process di service nya...
+	// worker pool buat background task (audit log, metrik, dll)
 	Pool *worker.Pool
 
-	// Database adapter untuk multidc/singledc
+	// adapter db buat multidc/singledc
 	DcAdapter *database.DcAdapter
 	Injector  injector.DBInjector
 }
@@ -69,18 +66,11 @@ func NewServer(cfg config.Config, fiberCfg *FiberConfig) *Server {
 		CaseSensitive: fiberCfg.CaseSensitive,
 		ErrorHandler:  fiberCfg.ErrorHandler,
 
-		// Immutable must be true because handlers may pass context-derived
-		// values (c.Params(), c.Query(), c.Get()) into the worker pool for
-		// background processing. Without this flag, those values are backed
-		// by mutable fasthttp byte slices that are recycled after the handler
-		// returns, causing silent data corruption in background tasks.
-		//
-		// ⬆
-		// berdasarkan penjelasan AI begitu, simpelnya bair gk ada data corruption
-		// ketika ada context-derived value ke dalam workerpool di background
+		// Immutable = true biar gak ada data corruption pas nilai dari context
+		// (c.Params, c.Query, dll) diterusin ke worker pool background.
+		// Tanpa ini, nilai-nilai itu bisa ke-recycle sama fasthttp sebelum sempet dipakai.
 		Immutable: true,
 
-		// Setup timeouts and body limits
 		ReadTimeout:  fiberCfg.ReadTimeout,
 		WriteTimeout: fiberCfg.WriteTimeout,
 		IdleTimeout:  fiberCfg.IdleTimeout,
@@ -107,8 +97,7 @@ func (s *Server) SetInjector(inject injector.DBInjector) {
 }
 
 func (s *Server) Start() error {
-	// Launch background worker pool before accepting HTTP traffic so that
-	// handlers can dispatch tasks from the very first request.
+	// jalanin worker pool duluan sebelum nerima request HTTP
 	s.Pool.Start(context.Background())
 
 	s.MiddlewareDeps.InitAllMiddleware()
@@ -118,12 +107,10 @@ func (s *Server) Start() error {
 		swagger.SwaggerSetup()
 	}
 
-	// In Fiber v3 app.Static() was removed. Static files are served via the
-	// static middleware registered as a catch-all route so that more specific
-	// routes (API, swagger, health probes) take precedence.
+	// static file (HTML, gambar, dll) diserve lewat catch-all route "/*"
+	// biar route API yang lebih spesifik tetap didahulukan
 	s.App.Get("/*", static.New("./static/public"))
 
-	// DisableStartupMessage was moved from fiber.Config to ListenConfig in v3.
 	return s.App.Listen(":"+s.Cfg.Port, fiber.ListenConfig{
 		DisableStartupMessage: false,
 	})

@@ -2,8 +2,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/andybalholm/brotli v1.2.1 h1:R+f5xP285VArJDRgowrfb9DqL18yVK0gKAW/F+eTWro=
 github.com/andybalholm/brotli v1.2.1/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
-github.com/boni-fm/go-libsd3 v0.0.2-beta.3 h1:ovGzi1ev8mJDkr4UD7qj+T7Qq4Hszon+6EFboIYZEFg=
-github.com/boni-fm/go-libsd3 v0.0.2-beta.3/go.mod h1:D8sux0QO6Zf5PSoBm1+q3djWWyUqYb9xJz0qaqcmbeM=
+github.com/boni-fm/go-libsd3 v0.0.2-beta.4 h1:hA0JvyxIHu362xRNXSYjpvfHETvsD3LF+SKsYhbLRGw=
+github.com/boni-fm/go-libsd3 v0.0.2-beta.4/go.mod h1:D8sux0QO6Zf5PSoBm1+q3djWWyUqYb9xJz0qaqcmbeM=
 github.com/cockroachdb/cockroach-go/v2 v2.2.0 h1:/5znzg5n373N/3ESjHF5SMLxiW4RKB05Ql//KWfeTFs=
 github.com/cockroachdb/cockroach-go/v2 v2.2.0/go.mod h1:u3MiKYGupPPjkn3ozknpMUpxPaNLTFWAya419/zv6eI=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

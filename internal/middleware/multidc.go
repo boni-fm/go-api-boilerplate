@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"go-api-boilerplate/config"
 	"go-api-boilerplate/internal/database"
 	"regexp"
@@ -38,13 +37,13 @@ func MultiDCMiddleware(logger *log.Logger, cfg *config.Config, dbAdapter *databa
 			logger.Warn("kunci dc kosong ~~")
 			return ctx.JSON(
 				fiber.Map{
-					"status":    "gagal ambil kunci ~ " + strconv.FormatInt(fiber.StatusBadRequest, 32),
+					"status":    fiber.StatusBadRequest,
 					"isSuccess": false,
 					"message":   "Kunci tidak ditemukan; isi query param 'KodeDC', header 'X-kunci-dc', atau X-Forwarded-Prefix (contoh: /apixxxg001)",
 				})
 		}
 
-		db, err := dbAdapter.GetOrInit(context.Background(), kunciDc)
+		db, err := dbAdapter.GetOrInit(ctx.Context(), kunciDc)
 		if err != nil {
 			logger.Warn("Gagal mengambil/initialize koneksi db " + kunciDc + " | ERR :: " + err.Error())
 			return ctx.JSON(

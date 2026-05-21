@@ -1,6 +1,3 @@
-// Package services contains the business-logic layer for the application.
-// Each service owns its domain's rules; persistence is delegated to a
-// repository interface so that the service can be tested in isolation.
 package services
 
 import (

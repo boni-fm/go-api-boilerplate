@@ -1,5 +1,5 @@
-// Package database provides the database connection layer, including a
-// multi-tenant registry and request-scoped context helpers.
+// Package database nyediain layer koneksi database,
+// termasuk registry multi-tenant dan helper buat context request.
 package database
 
 import (
@@ -13,28 +13,28 @@ import (
 	"github.com/boni-fm/go-libsd3/pkg/log"
 )
 
-// contextKey is the unexported type used to store a *postgres.Database
-// in a context.Context, preventing collisions with other packages.
+// contextKey adalah tipe unexported buat nyimpen *postgres.Database
+// di dalam context.Context, biar gak bentrok sama package lain.
 type contextKey struct{}
 
-// Registry holds one or more named database connections for multi-DC /
-// multi-tenant deployments. All methods are safe for concurrent use.
+// Registry nyimpen satu atau lebih koneksi database untuk multi-DC/multi-tenant.
+// Semua method aman dipanggil dari banyak goroutine sekaligus.
 //
-// The first connection registered becomes the default, which is used when
-// the request does not specify a tenant key (X-Kunci header).
+// Koneksi pertama yang didaftarin otomatis jadi default —
+// dipake kalau request gak spesifiin tenant key (header X-Kunci).
 type Registry struct {
-	mu         sync.RWMutex
+	mu          sync.RWMutex
 	connections map[string]*postgres.Database
 	defaultKey  string
 }
 
-// NewRegistry returns an empty, ready-to-use Registry.
+// NewRegistry bikin Registry baru yang kosong dan siap dipakai.
 func NewRegistry() *Registry {
 	return &Registry{connections: make(map[string]*postgres.Database)}
 }
 
-// Register adds a named database connection. The first connection registered
-// is automatically promoted to the default.
+// Register nambahin koneksi database dengan nama tertentu.
+// Koneksi pertama yang didaftarin otomatis jadi default.
 func (r *Registry) Register(kunci string, db *postgres.Database) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -44,8 +44,8 @@ func (r *Registry) Register(kunci string, db *postgres.Database) {
 	}
 }
 
-// Get retrieves the connection for the given key. The second return value
-// indicates whether the key was found in the registry.
+// Get ngambil koneksi berdasarkan key. Return value kedua nunjukin
+// apakah key-nya ketemu atau enggak.
 func (r *Registry) Get(kunci string) (*postgres.Database, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -53,25 +53,24 @@ func (r *Registry) Get(kunci string) (*postgres.Database, bool) {
 	return db, ok
 }
 
-// Default returns the default (first-registered) database connection.
-// Returns nil if no connections have been registered.
+// Default ngambil koneksi default (yang pertama didaftarin).
+// Kalau belum ada yang didaftarin, return nil.
 func (r *Registry) Default() *postgres.Database {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.connections[r.defaultKey]
 }
 
-// DefaultKey returns the key of the default connection.
+// DefaultKey ngambil key dari koneksi default.
 func (r *Registry) DefaultKey() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.defaultKey
 }
 
-// Close closes all registered database connections. It should be called
-// during graceful shutdown so that connection pools are drained properly
-// and PostgreSQL is not left with lingering idle connections (ARC-004).
-// Errors are collected but not fatal — the process is shutting down.
+// Close nutup semua koneksi yang terdaftar — dipanggil pas graceful shutdown
+// supaya connection pool ke PostgreSQL bersih gak ada yang ngambang.
+// Error dikumpulin tapi gak fatal, toh prosesnya mau mati juga.
 func (r *Registry) Close() []error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -84,14 +83,13 @@ func (r *Registry) Close() []error {
 	return errs
 }
 
-// dbConnectTimeout is the maximum time allowed for a single database
-// connection to be established during startup. If PostgreSQL is unreachable
-// the process fails fast instead of hanging indefinitely (ARC-002).
+// dbConnectTimeout batas waktu maksimal buat establish koneksi database waktu startup.
+// Kalau PostgreSQL gak bisa direach, proses langsung gagal — gak nunggu lama.
 const dbConnectTimeout = 15 * time.Second
 
-// InitDatabases connects to every kunci listed in the comma-separated
-// kunci string (e.g. "g009sim,g010sim") and registers them in a new Registry.
-// It panics via log.Panicf if any connection cannot be established.
+// InitDatabases konek ke semua kunci yang ada di string kunci (pisah koma,
+// contoh: "g009sim,g010sim") terus daftarin ke Registry baru.
+// Panic lewat log.Panicf kalau ada koneksi yang gagal.
 func InitDatabases(kunci string, log_ *log.Logger) *Registry {
 	registry := NewRegistry()
 	for _, k := range strings.Split(kunci, ",") {
@@ -106,9 +104,8 @@ func InitDatabases(kunci string, log_ *log.Logger) *Registry {
 	return registry
 }
 
-// initSingle opens a single PostgreSQL connection pool for the given kunci.
-// ARC-002: a timeout is applied so the process fails fast when the database
-// is unreachable instead of blocking the startup sequence indefinitely.
+// initSingle buka satu koneksi PostgreSQL untuk kunci tertentu.
+// Ada timeout biar gak nge-hang pas startup kalau DB-nya mati.
 func initSingle(kunci string, log_ *log.Logger) *postgres.Database {
 	ctx, cancel := context.WithTimeout(context.Background(), dbConnectTimeout)
 	defer cancel()
@@ -121,19 +118,18 @@ func initSingle(kunci string, log_ *log.Logger) *postgres.Database {
 	return db
 }
 
-// WithDB stores the given database connection in the context, making it
-// available to repository methods via DBFromContext.
+// WithDB nyimpen koneksi database ke dalam context,
+// biar bisa diambil lagi di repository via DBFromContext.
 func WithDB(ctx context.Context, db *postgres.Database) context.Context {
 	return context.WithValue(ctx, contextKey{}, db)
 }
 
-// DBFromContext retrieves the *postgres.Database previously stored by
-// WithDB. Returns nil if no database has been set on the context.
+// DBFromContext ngambil *postgres.Database yang udah disimpen sama WithDB.
+// Return nil kalau belum pernah di-set.
 func DBFromContext(ctx context.Context) *postgres.Database {
 	db, _ := ctx.Value(contextKey{}).(*postgres.Database)
 	return db
 }
 
-// ErrNoDB is returned by repository methods when no database connection
-// is found in the request context.
+// ErrNoDB dikembaliin sama repository kalau context-nya gak ada koneksi DB-nya.
 var ErrNoDB = fmt.Errorf("no database in request context")

@@ -19,31 +19,23 @@ func NewMiddlewareDependencies(log *log.Logger, app *fiber.App, isDevelopment bo
 	}
 }
 
-// InitAllMiddleware registers all global middleware in the correct order.
+// InitAllMiddleware daftarin semua global middleware dengan urutan yang bener.
 //
-// Order matters:
-//  1. RequestID     — must be first so every subsequent log line, error response
-//     and downstream service call can include the correlation ID.
-//  2. Logger        — logs the request after RequestID is set.
-//  3. Recover       — catches panics and returns a standard error response.
-//  4. MultiTenant   — resolves the tenant DB connection from the X-Kunci header
-//     and stores it in the request context for repository use.
-//  5. Timeout       — wraps each request's context with a deadline so DB queries
-//     and outbound I/O do not block indefinitely (runs after MultiTenant so the
-//     derived timeout context inherits the DB value).
-//  6. Favicon       — serves favicon without hitting the router.
-//  7. RateLimiter   — protects downstream handlers from excessive traffic.
+// Urutan penting banget:
+//  1. RequestID   — harus paling duluan, biar semua log dan error response punya correlation ID.
+//  2. Logger      — log request setelah RequestID udah ada.
+//  3. Recover     — nangkep panic dan balikin error response yang rapi.
+//  4. Timeout     — kasih deadline ke context tiap request, biar query DB gak nge-hang selamanya.
+//  5. Favicon     — serve favicon langsung, gak perlu lewat router.
+//  6. RateLimiter — lindungi handler dari request yang kebanyakan.
 //
-// Note: In Fiber v3, healthcheck endpoints are registered as individual routes
-// (GET /live and GET /ready) in the router rather than as a middleware. The
-// RateLimiter skips these paths via its Next function to prevent probes from
-// being throttled.
+// Catatan: health check endpoint (GET /live) didaftarin sebagai route biasa di router,
+// bukan middleware. RateLimiter skip path ini via fungsi Next-nya biar probe gak ikut ke-throttle.
 func (md *MiddlewareDependencies) InitAllMiddleware() {
 	md.App.Use(
 		RequestIDMiddleware(),
 		LoggerMiddleware(md.Log.Logger),
 		RecoverMiddleware(md.Log),
-		//MultiDCMiddleware(md.Log, md.cfg, md.dbAdapter),
 		TimeoutMiddleware(defaultRequestTimeout),
 		FaviconMiddleware(),
 		RateLimiter(md.Log.Logger),

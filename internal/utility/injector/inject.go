@@ -75,11 +75,15 @@ func NewServiceFactory[S any](p DBInjector, log *logger.Logger, cfg *config.Conf
 }
 
 // Build resolves the DB and builds the service in one call.
-// This replaces every handler's svc() method.
-func (f *ServiceFactory[S]) Build(c fiber.Ctx, log *logger.Logger, cfg *config.Config) (*S, error) {
+// Dipaksa menggunakan service ~
+//
+// Note ::
+//   - untuk service yang baru, bisa disamakan constructor nya dengan contoh (dipakai atau tidak)
+//     > db, logger, config
+func (f *ServiceFactory[S]) Build(c fiber.Ctx) (*S, error) {
 	db, err := f.dbInjector.GetDB(c)
 	if err != nil {
 		return nil, err
 	}
-	return f.constructor(db, log, cfg), nil
+	return f.constructor(db, f.log, f.cfg), nil
 }

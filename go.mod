@@ -3,7 +3,7 @@ module go-api-boilerplate
 go 1.25.8
 
 require (
-	github.com/boni-fm/go-libsd3 v0.0.2-beta.3
+	github.com/boni-fm/go-libsd3 v0.0.2-beta.4
 	github.com/gofiber/fiber/v3 v3.2.0
 	github.com/gofiber/utils/v2 v2.0.4
 	github.com/hashicorp/golang-lru/v2 v2.0.7

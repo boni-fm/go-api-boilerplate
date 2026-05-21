@@ -20,7 +20,7 @@ import (
 // @Failure 500 {object} fibererror.ResponseError "Internal server error"
 // @Router /api/users [post]
 func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
-	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	svc, err := hr.UserService.Build(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
@@ -74,7 +74,7 @@ func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 // @Failure 500 {object} fibererror.ResponseError "Failed to fetch users"
 // @Router /api/users [get]
 func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
-	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	svc, err := hr.UserService.Build(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
@@ -113,7 +113,7 @@ func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
 // @Failure 500 {object} fibererror.ResponseError "Failed to update password"
 // @Router /api/users/{user_name}/password [put]
 func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
-	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	svc, err := hr.UserService.Build(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
@@ -168,7 +168,7 @@ func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 // @Failure 500 {object} fibererror.ResponseError "Failed to delete user"
 // @Router /api/users/{user_name} [delete]
 func (hr *HandlersRegistry) DeleteUser(c fiber.Ctx) error {
-	svc, err := hr.UserService.Build(c, hr.log_, hr.cfg)
+	svc, err := hr.UserService.Build(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
 			Code:    fiber.StatusInternalServerError,
