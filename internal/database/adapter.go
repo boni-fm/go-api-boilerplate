@@ -8,7 +8,7 @@ import (
 
 	pgsd3 "github.com/boni-fm/go-libsd3/pkg/db/postgres"
 	logger "github.com/boni-fm/go-libsd3/pkg/log"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/jellydator/ttlcache/v3"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -49,7 +49,7 @@ type DcAdapter struct {
 	//   - evict TTL kalau idle > IdleTTL
 	//   - callback OnEvict buat nutup DB yang keluarkan
 	//   - thread-safe secara internal
-	cache *lru.LRU[string, *pgsd3.Database]
+	cache *ttlcache.Cache[string, *pgsd3.Database]
 
 	cm  *pgsd3.ConnectionManager
 	cfg AdapterConfig
@@ -83,16 +83,16 @@ func GetDcAdapterWithCustomConfig(
 		//
 		// Nutup koneksi lewat pool biar entry-nya juga ilang dari ConnectionPool.
 		// Ini penting supaya Connect() fast path gak balik pointer yang udah mati.
-		onEvict := func(key string, db *pgsd3.Database) {
-			_ = pgsd3.GetConnectionPool().CloseConnection(key)
-			log.Infof("Evicted [%s] (LRU or TTL)", key)
+		onEvict := func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *pgsd3.Database]) {
+			_ = pgsd3.GetConnectionPool().CloseConnection(item.Key())
+			log.Infof("Evicted [%s] (Reason: %v)", item.Key(), reason)
 		}
 
-		a.cache = lru.NewLRU[string, *pgsd3.Database](
-			cfg.MaxDc,
-			onEvict,
-			cfg.IdleTTL,
+		a.cache = ttlcache.New[string, *pgsd3.Database](
+			ttlcache.WithCapacity[string, *pgsd3.Database](uint64(cfg.MaxDc)),
+			ttlcache.WithTTL[string, *pgsd3.Database](cfg.IdleTTL),
 		)
+		a.cache.OnEviction(onEvict)
 
 		adapterInstance = a
 	})
@@ -111,16 +111,16 @@ func GetDcAdapter(
 			appName: appName,
 		}
 
-		onEvict := func(key string, db *pgsd3.Database) {
-			_ = pgsd3.GetConnectionPool().CloseConnection(key)
-			log.Infof("Evicted [%s] (LRU or TTL)", key)
+		onEvict := func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *pgsd3.Database]) {
+			_ = pgsd3.GetConnectionPool().CloseConnection(item.Key())
+			log.Infof("Evicted [%s] (Reason: %v)", item.Key(), reason)
 		}
 
-		a.cache = lru.NewLRU[string, *pgsd3.Database](
-			a.cfg.MaxDc,
-			onEvict,
-			a.cfg.IdleTTL,
+		a.cache = ttlcache.New[string, *pgsd3.Database](
+			ttlcache.WithCapacity[string, *pgsd3.Database](uint64(a.cfg.MaxDc)),
+			ttlcache.WithTTL[string, *pgsd3.Database](a.cfg.IdleTTL),
 		)
+		a.cache.OnEviction(onEvict)
 
 		adapterInstance = a
 	})
@@ -146,12 +146,13 @@ func (a *DcAdapter) DefaultDbConfig(kodeDc string) pgsd3.Config {
 func (a *DcAdapter) GetOrInit(ctx context.Context, kodeDc string) (*pgsd3.Database, error) {
 	// Fast path: cache hit — cek dulu IsClosed() biar gak balik koneksi mati.
 	// Bisa terjadi race antara TTL eviction goroutine dan request yang masuk.
-	if db, ok := a.cache.Get(kodeDc); ok {
+	if item := a.cache.Get(kodeDc); item != nil {
+		db := item.Value()
 		if !db.IsClosed() {
 			return db, nil
 		}
 		// Entry udah mati, buang — slow path bakal bikin koneksi baru.
-		a.cache.Remove(kodeDc) // trigger onEvict → hapus dari ConnectionPool juga
+		a.cache.Delete(kodeDc) // trigger onEvict → hapus dari ConnectionPool juga
 	}
 
 	// Slow path: cache miss — deduplikasi pakai singleflight
@@ -177,7 +178,7 @@ func (a *DcAdapter) GetOrInit(ctx context.Context, kodeDc string) (*pgsd3.Databa
 
 		// Simpen ke cache didalam singleflight fn supaya goroutine lain
 		// yang nunggu langsung bisa nemu di cache setelah ini return.
-		a.cache.Add(kodeDc, db)
+		a.cache.Set(kodeDc, db, ttlcache.DefaultTTL)
 		a.log.Infof("Connected [%s]", kodeDc)
 		return db, nil
 	})
@@ -197,7 +198,7 @@ func (a *DcAdapter) PreConnect(ctx context.Context, kodeDc string) error {
 
 // Reset buang entry yang gagal atau stale — GetOrInit() berikutnya bakal retry.
 func (a *DcAdapter) Reset(kodeDc string) {
-	a.cache.Remove(kodeDc) // trigger OnEvict → CloseConnection
+	a.cache.Delete(kodeDc) // trigger OnEvict → CloseConnection
 	a.log.Infof("Reset KodeDC [%s]", kodeDc)
 }
 
@@ -223,7 +224,7 @@ func (a *DcAdapter) HealthCheck(ctx context.Context) map[string]error {
 // CloseAll graceful shutdown — nutup semua koneksi yang ada di cache.
 // Purge() manggil OnEvict tiap entry → CloseConnection masing-masing.
 func (a *DcAdapter) CloseAll() {
-	a.cache.Purge()
+	a.cache.DeleteAll()
 	_ = a.cm.CloseAllConnections()
 	a.log.Infof("Database [%s] closed", a.appName)
 }
