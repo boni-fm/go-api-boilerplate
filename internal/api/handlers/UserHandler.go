@@ -22,37 +22,21 @@ import (
 func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 	svc, err := hr.UserService.Build(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Gagal initialize user service ...",
-		})
+		return fibererror.InternalServerError(c, "Gagal initialize user service ...")
 	}
 
 	var req models.CreateUserRequest
 	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: "Invalid request body",
-		})
+		return fibererror.BadRequestError(c, "Invalid request body")
 	}
 
 	if req.UserName == "" || req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: "user_name and password are required",
-		})
+		return fibererror.BadRequestError(c, "user_name and password are required")
 	}
 
 	if err := svc.CreateUser(c.Context(), req.UserName, req.Password); err != nil {
 		hr.log_.Errorf("Create user error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Failed to create user",
-		})
+		return fibererror.InternalServerError(c, "Failed to create user")
 	}
 
 	hr.log_.Infof("User created: %s", req.UserName)
@@ -76,21 +60,13 @@ func (hr *HandlersRegistry) CreateUser(c fiber.Ctx) error {
 func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
 	svc, err := hr.UserService.Build(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Gagal initialize user service ...",
-		})
+		return fibererror.InternalServerError(c, "Gagal initialize user service ...")
 	}
 
 	users, err := svc.GetUsers(c.Context())
 	if err != nil {
 		hr.log_.Errorf("Get users error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Failed to fetch users",
-		})
+		return fibererror.InternalServerError(c, "Failed to fetch users")
 	}
 
 	hr.log_.Infof("Fetched %d users", len(users))
@@ -115,39 +91,23 @@ func (hr *HandlersRegistry) GetUsers(c fiber.Ctx) error {
 func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 	svc, err := hr.UserService.Build(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Gagal initialize user service ...",
-		})
+		return fibererror.InternalServerError(c, "Gagal initialize user service ...")
 	}
 
 	userName := c.Params("user_name")
 
 	var req models.UpdateUserPasswordRequest
 	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: "Invalid request body",
-		})
+		return fibererror.BadRequestError(c, "Invalid request body")
 	}
 
 	if req.NewPassword == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusBadRequest,
-			Error:   "Bad Request",
-			Message: "new_password is required",
-		})
+		return fibererror.BadRequestError(c, "new_password is required")
 	}
 
 	if err := svc.UpdateUserPassword(c.Context(), userName, req.NewPassword); err != nil {
 		hr.log_.Errorf("Update password error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Failed to update password",
-		})
+		return fibererror.InternalServerError(c, "Failed to update password")
 	}
 
 	hr.log_.Infof("Password updated for: %s", userName)
@@ -170,22 +130,14 @@ func (hr *HandlersRegistry) UpdateUserPassword(c fiber.Ctx) error {
 func (hr *HandlersRegistry) DeleteUser(c fiber.Ctx) error {
 	svc, err := hr.UserService.Build(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Gagal initialize user service ...",
-		})
+		return fibererror.InternalServerError(c, "Gagal initialize user service ...")
 	}
 
 	userName := c.Params("user_name")
 
 	if err := svc.DeleteUser(c.Context(), userName); err != nil {
 		hr.log_.Errorf("Delete user error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fibererror.ResponseError{
-			Code:    fiber.StatusInternalServerError,
-			Error:   "Internal Server Error",
-			Message: "Failed to delete user",
-		})
+		return fibererror.InternalServerError(c, "Failed to delete user")
 	}
 
 	hr.log_.Infof("User deleted: %s", userName)

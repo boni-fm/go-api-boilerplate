@@ -43,11 +43,11 @@ func NewLocalsInjector() *LocalsInjector {
 }
 
 func (p *LocalsInjector) GetDB(c fiber.Ctx) (*pgsd3.Database, error) {
-	db, ok := c.Locals(p.localKey).(*pgsd3.Database)
-	if !ok || db == nil {
-		return nil, fmt.Errorf("no db in locals[%s] — DBResolver is not registered", p.localKey)
+	h, ok := c.Locals(p.localKey).(*middleware.Db)
+	if !ok || h == nil || h.DB == nil {
+		return nil, fmt.Errorf("no db in locals[%s] — MultiDCMiddleware is not registered", p.localKey)
 	}
-	return db, nil
+	return h.DB, nil
 }
 
 // ServiceFactory ~ biar dynamic, gk init terus2an ...

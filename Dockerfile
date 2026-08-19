@@ -36,12 +36,11 @@ COPY --from=builder /src/docs /docs
 ENV TZ=Asia/Jakarta
 
 WORKDIR /
-USER appuser
 
-EXPOSE 8080
+EXPOSE 80
 
 # Health checks: liveness at /live, readiness at /ready.
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-    CMD wget -qO- http://localhost:8080/live || exit 1
+    CMD wget -qO- http://localhost:80/live || exit 1
 
 ENTRYPOINT ["/app"]
