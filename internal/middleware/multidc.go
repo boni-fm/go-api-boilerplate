@@ -11,6 +11,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+type Db struct{ DB *pgsd3.Database }
+
 var prefixKunciRe = regexp.MustCompile(`(?i)(g\d+(?:sim)?)(?:[^a-zA-Z0-9]|$)`)
 
 const (
@@ -94,7 +96,7 @@ func MultiDCMiddleware(logger *log.Logger, cfg *config.Config, dbAdapter *databa
 				  But *pgsd3.Database itself → still alive in TenantAdapter
 				  (GC won't collect it — TenantAdapter holds the real reference)
 		*/
-		ctx.Locals(DbLocalKey, db)          //dbLocal
+		ctx.Locals(DbLocalKey, &Db{DB: db}) //dbLocal
 		ctx.Locals(KodeDcLocalKey, kunciDc) // kodedc
 
 		return ctx.Next()
@@ -126,8 +128,12 @@ func resolveKunci(c fiber.Ctx) string {
 // > KodeDC/Kunci
 
 func DBFromLocals(c fiber.Ctx) (*pgsd3.Database, bool) {
-	db, ok := c.Locals(DbLocalKey).(*pgsd3.Database)
-	return db, ok
+	h, ok := c.Locals(DbLocalKey).(*Db)
+	if !ok || h == nil || h.DB == nil {
+		return nil, false
+	}
+	return h.DB, true
+
 }
 
 func KodeDCFromLocals(c fiber.Ctx) string {
